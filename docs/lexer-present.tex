@@ -1,0 +1,639 @@
+\documentclass[16pt,pdf,unicode]{beamer}
+
+\usepackage[utf8]{inputenc}
+\usepackage[english,russian]{babel}
+\usepackage{listings}
+\usepackage{tikz}
+\usepackage{color}
+\usepackage{geometry}
+
+\usetikzlibrary{positioning}
+\usetikzlibrary{automata}
+\usetikzlibrary{chains}
+\usetikzlibrary{shapes,arrows}
+\usetikzlibrary{calc} % for manimulation of coordinates
+
+\usetheme{Boadilla}
+\setbeamercovered{transparent}
+\lstset{ language=Lisp }
+
+\title[Лексический анализ]{Теория и практика компилляции программ: лексический анализ}
+\author[А.Ю. Заостровных]{Заостровных Арсений Юрьевич}
+\institute[МФТИ]{Московский физико-технический университет\\
+	{\tiny государственный университет}\\}
+\date[2012]{МФТИ, 27 октября 2012 года}
+
+\begin{document}
+
+%\iffalse
+
+\begin{frame}[plain]
+\maketitle
+\end{frame}
+
+\begin{frame}
+  \frametitle{Положение лексического анализа}
+
+\begin{tikzpicture}[node distance=0.5cm]
+\tikzset{
+ mynd/.style={rectangle,rounded corners,draw=black, top color=white,
+   bottom color=blue!50,very thick, inner sep=1em,
+   minimum size=3em, text centered},
+ myarr/.style={->, >=latex', shorten >=1pt, thick}
+}
+\node[mynd,top color=blue!30,bottom color=blue!30] (stable) {ТАБЛИЦА СИМВОЛОВ};
+\node[above=2.5cm of stable] (dummy){};
+\node[mynd,left=of dummy] (lexer) {ЛЕКСЕР};
+\node[mynd,right=of dummy] (parser) {ПАРСЕР};
+\node[right=of parser,text width=1.5cm] (fin) {Семантический анализ};
+\node[left=of lexer,text width=1.5cm] (sta) {Исходный текст};
+
+\draw[myarr,<->] (lexer) -- (stable);
+\draw[myarr,<->] (parser) -- (stable);
+
+\draw[myarr,transform canvas={yshift=0.3cm}] (lexer.east) -- (parser.west) node[midway,above]{токен};
+\draw[myarr,<-,transform canvas={yshift=-0.3cm}] (lexer.east) -- (parser.west) node[midway,below]{lex};
+\draw[myarr] (sta.center) -- (lexer.west);
+\draw[myarr] (parser.east) -- (fin.center);
+\end{tikzpicture}
+
+%\includegraphics[scale=0.5]{lexer_role.png}
+\end{frame}
+
+\begin{frame}
+  \frametitle{Токен, лексама и шаблон}
+  \begin{description}
+  \item[Токен] -- пара: имя и, опционально, прикреплённое значение. Имя -- это элемент некоторого конечного множества.
+  \item[Лексема] -- последовательность знаков, соответствующая определённому токену.
+  \item[Шаблон] -- описание всех лексем, соответствующих токенам с одним и тем же именем.
+  \end{description}
+\end{frame}
+
+\begin{frame}
+  \frametitle{Примеры}
+  \begin{table}
+    \begin{tabular}{l|p{4.5cm}|p{4cm}}
+      \hline
+      {\bf Имя токена} & {\bf Шаблон} & {\bf Лексемы} \\ \hline \hline
+      BOOLEAN & ``\#t'' или ``\#f'' & \#t, \#f \\ 
+      LPAREN & ``('' или ``['' & (, [ \\ 
+      SYMBOL & набор букв и цифр, содержащий букву & alala, 3k34dk, if, let \\ 
+      NUMBER & непустой набор цифр и точки & 32, 0.0, .121, 3.14 \\
+      STRING & всё, кроме "\, окружённое " & "мечты" \, "error"\\
+      SPACE & непустая последовательность пробелов & \\
+    \end{tabular}
+  \end{table}
+\end{frame}
+
+\begin{frame}
+  \frametitle{Атрибуты токенов}
+  \begin{block}{}
+    (format \#t ``$\sim$a'' 18.3)
+  \end{block}
+  \begin{itemize}
+  \item ( LPAREN )
+  \item ( SYMBOL, индекс ``format'' в таблице символов )
+  \item ( SPACE ) 
+  \item ( BOOLEAN, true ) 
+  \item ( SPACE ) 
+  \item ( STRING, индекс ``$\sim$a'' в таблице строк ) 
+  \item ( SPACE ) 
+  \item ( NUMBER, 18.3 ) 
+  \item ( RPAREN ) 
+  \end{itemize}
+\end{frame}
+
+\begin{frame}
+  \frametitle{Лексические ошибки}
+  \begin{itemize}
+  \item Некоторые ошибки лексер не способен обнаружить, например:
+    \begin{itemize}
+    \item (let ((a 3))) a) $\rightarrow$ лишняя скобка
+    \item (/ 1 ``2'') $\rightarrow$ неправильный тип
+    \end{itemize}
+  \item Однако некоторые, может:
+    \begin{itemize}
+    \item "abcd  $\langle$ EOF $\rangle$ $\rightarrow$ незаконченная строка
+    \item 13a $\rightarrow$ недопустимая конструкция в Си
+    \end{itemize}
+  \item Такие ошибки как правило сигнализируются когда ни один шаблон не может отыскать лексему в тексте
+  \end{itemize}
+\end{frame}
+
+\begin{frame}
+  \frametitle{Восстановление после ошибок}
+  \begin{description}
+  \item[Паника] Игнорирование всех последующих знаков. До конца файла, либо до некоторого знака (например пробела)
+  \item[Догадка]
+    \begin{itemize}
+    \item Удаление одного знака из входного потока,
+    \item Вставка надостающего знака во входной поток
+    \item Замена одно знака другим
+    \item Перестановка двух соседних знаков
+    \end{itemize}
+    и повторная попытка найти лексему.
+  \end{description}
+\end{frame}
+
+\begin{frame}
+  \frametitle{Общий механизм анализа}
+  \begin{itemize}
+    \item Лексер считывает и запоминает по одному знаку.
+    \item Когда информации становится достаточно, он передаёт парсеру очередной токен.
+    \item Иногда лексеру требуется знать последующие символы, чтобы определить текущий токен. Например:
+      \begin{itemize}
+      \item В Fortran: DO 5 I = 1.25 $\leftrightarrow$ DO 5 I = 1,25
+      \item В Си: -, <, =
+      \end{itemize}
+      Для этого применяется двухбуферная схема.
+  \end{itemize}
+\end{frame}
+
+\begin{frame}
+  \frametitle{Определения}
+  \begin{description}
+  \item[Алфавит] -- конечное множество знаков. Обозначим $\Sigma$.
+  \item[Язык] -- набор строк знаков из алфавита $\Sigma$.
+  \item[Грамматика] -- набор правил, выделяющий из всех последовательностей алфавитных знаков,
+    строки принадлежащие языку.
+  \item[Функция значания L(e) = M] -- язык M соответствующий грамматике e.
+  \end{description}
+  \begin{block}{}
+    Грамматика задаёт только один язык. Но язык может быть определён несколькими грамматиками.
+    L(e) - инъекция.
+  \end{block}
+\end{frame}
+
+\begin{frame}
+  \frametitle{Регулярные грамматики}
+  \begin{itemize}
+  \item Задают языки, включающие:
+    \begin{itemize}
+      \item Пустую строку $\varepsilon$: \{``''\} или $\varnothing$
+      \item Одиночные символы из алфавита $\Sigma$ : \{``a''\}, \{``b''\}
+      \item Объединение: $A + B = \{a | a\in A\} \cup \{b | b\in B\}$
+      \item Конкатенация: $AB = \{ab | a\in A \wedge b\in B\}$
+      \item Повторение: $A$*$ = \bigcup\limits_{i\geq0}A^i, \{A^0=\varepsilon, A^i={A\dotso A}\ i$раз$\}$
+    \end{itemize}
+  \item Контекстно-свободные
+    \begin{itemize}
+    \item C++ шаблон: A$\textless$B$\textless$C$\textgreater \textgreater$ a;
+    \item C++ сдвиг:  C$\textgreater \textgreater$ a;
+    \end{itemize}
+  \item Задаются регулярными выражениями
+  \item Задаются кончеными автоматами
+  \end{itemize}
+\end{frame}
+
+\begin{frame}
+  \frametitle{Регулярные выражения}
+  \begin{itemize}
+  \item База:
+    \begin{itemize}
+      \item Пустая строка $\varepsilon$: $L(\varepsilon) = \{\varnothing\}$
+      \item Один символ $a\in \Sigma$: $L(\#\backslash a) = \{"a"\}$
+    \end{itemize}
+  \item Композиция:
+    \begin{itemize}
+      \item Объединение: $L(A + B) = L(A) \cup L(B)$
+      \item Конкатенация: $L(AB) = \{ab|a\in L(a) \wedge b\in B \}$
+      \item Повторение: $L(A^*) = \bigcup\limits_{i\geq0}A^i$
+    \end{itemize}
+    \hrule
+  \item Расширения:
+    \begin{itemize}
+      \item $A^+=AA^*$
+      \item $A?=A+\varepsilon$
+      \item $A^k=\underbrace{AA\dotsm A}_{k\ \text{раз}}$
+    \end{itemize}
+  \end{itemize}
+\end{frame}
+
+\begin{frame}
+  \frametitle{POSIX нотация}
+  \begin{itemize}
+    \item $```` \equiv \varepsilon$
+    \item $``abc'' \equiv \{``a''\}|\{``b''\}|\{``c''\}$
+    \item $(A) \equiv A$
+    \item $A|B \equiv A+B$
+    \item $AB$
+    \item $. \equiv \Sigma \backslash\{$``перевод строки''$\}$
+    \item $[abc] \equiv ``a``|``b``|``c``$
+    \item $[j-p] \equiv\{$все буквы коды которых лежат между j и p включительно $\}$
+    \item $[^\wedge...] \equiv \Sigma$ кроме [...]
+    \item $A\{n\} \equiv A^n$
+    \item $A\{n,m\} \equiv A^n + A^{n+1} + \dotsb + A^m$
+    \item $A\{,m\} \equiv A\{0,m\} ; A\{n,\} \equiv A^nA^*$
+  \end{itemize}
+\end{frame}
+
+\begin{frame}
+  \frametitle{Примеры}
+  \begin{itemize}
+    \item Цифра: '0'|'1'|'2'|'3'|'4'|'5'|'6'|'7'|'8'|'9' $\equiv [0-9]$
+    \item Целое неотрицательное число($Z^+_0$): \only<2->{$[0-9]^{+}$}
+    \item Целое число($Z$): \only<3->{$'-'?[0-9]^+$}
+    \item Десятичное дробное число: \only<4->{$'-'?[0-9]^{*}{'.'}[0-9]^+$}
+    \item Идентификатор в Си: \only<5->{$[a-zA-Z\_][0-9a-zA-Z\_]^*$}
+  \end{itemize}
+\end{frame}
+
+\begin{frame}
+  \begin{center}
+    \structure{{\Huge А имплементация?}\\
+      \vspace{1cm}
+      {\Large Для строки s и выражения e, $s\in L(e)$?}}
+  \end{center}
+\end{frame}
+
+\begin{frame}
+  \frametitle{Конечный автомат}
+    \begin{itemize}
+    \item Входной алфавит $\Sigma$
+    \item Конечный набор состояний $S$\\
+       \tikz \node[state] {$q_i$};
+    \item Начальное состояние $n\in S$\\
+      \tikz \node[state,initial,initial text=] {$n$};
+    \item Набор конечных состояний $F \subseteq S$\\
+      \tikz \node[state,accepting] {$q_k$};
+    \item Набор переходов из состояния $s_1\in S$ в состояние $s_2\in S$ по входу $a\in \Sigma$:
+      $s_1 \xrightarrow{a} s_2$\\
+      \begin{tikzpicture}
+        \node[state] (s1) {$s_1$};
+        \node[state] (s2) [node distance=2cm, right of=s1] {$s_2$};
+        \draw[->,thick,bend left] (s1) edge node [above] {a} (s2);
+      \end{tikzpicture}
+    \end{itemize}
+\end{frame}
+
+\begin{frame}
+  \frametitle{Таблица и диаграмма переходов}
+  \begin{tikzpicture}[-latex,node distance=2cm,auto,initial text=]
+    \node[state,initial]  (q0)                     {$q_0$};
+    \node[state]          (q1) [above right of=q0] {$q_1$};
+    \node[state]          (q2) [below right of=q0] {$q_2$};
+    \node[state]          (q3) [right of=q1]       {$q_3$};
+    \node[state]          (q4) [right of=q2]       {$q_4$};
+    \node[state,accepting](q5) [below right of=q3] {$q_5$};
+
+    \path (q0) edge              node {b} (q1)
+               edge              node {b} (q2)
+          (q1) edge              node {c} (q3)
+               edge              node {d} (q4)
+          (q2) edge              node {a} (q4)
+               edge [loop below] node {b} (q2)
+          (q3) edge              node {c} (q5)
+               edge [loop above] node {a} (q3)
+          (q4) edge              node {d} (q5);
+  \end{tikzpicture}
+  \begin{tabular}{l|| c | c | c | c }
+        & a             & b             &    c         &   d\\
+    \hline
+    $q_0$ & $\varnothing$ & $q_1$, $q_2$  & $\varnothing$ & $\varnothing$\\
+    $q_1$ & $\varnothing$ & $\varnothing$ & $q_3$         & $q_4$\\
+    $q_2$ & $q_4$         & $q_2$         & $\varnothing$ & $\varnothing$\\
+    $q_3$ & $q_3$         & $\varnothing$ & $q_5$         & $\varnothing$\\
+    $q_4$ & $\varnothing$ & $\varnothing$ & $\varnothing$ & $q_5$\\
+    $q_5$ & $\varnothing$ & $\varnothing$ & $\varnothing$ & $\varnothing$
+  \end{tabular}
+\end{frame}
+
+\begin{frame}
+  \frametitle{множественные и $\varepsilon$- переходы}
+  \begin{tikzpicture}[-latex,node distance=3cm, auto]
+    \node[state] (q0)                    {$q_0$};
+    \node[state] (q1)[right of=q0]       {$q_1$};
+    \node[state] (q2)[right of=q1]       {$q_2$};
+    \node[state] (q3)[above right of=q2] {$q_3$};
+    \node[state] (q4)[below right of=q2] {$q_4$};
+    \node[state] (q5)[right of=q2]       {$q_5$};
+    \path (q0) edge node {$\varepsilon$} (q1)
+          (q2) edge node {a}             (q3)
+               edge node {a}             (q4)
+               edge node {a}             (q5);
+  \end{tikzpicture}
+\end{frame}
+
+\begin{frame}
+  \frametitle{ДКА и НКА}
+  \begin{block}{Не детерменированный конечный автомат (НКА)}
+    Конечный автомат, который может одновременно быть в нескольких состояниях.\\
+    Может содержать:
+    \begin{itemize}
+      \item $\varepsilon$-переходы
+      \item множественные переходы
+    \end{itemize}
+  \end{block}
+  НКА как правило лаконичнее.
+  \begin{block}{Детерменированный конечный автомат (ДКА)}
+    Конечный автомат, находящийся в каждый момент времени только в одном состоянии.\\
+    {\bf Не} содержит:
+    \begin{itemize}
+      \item $\varepsilon$-переходы
+      \item множественные переходы
+    \end{itemize}
+  \end{block}
+  НКА может быть преобразован в ДКА принимающий тотже язык.
+\end{frame}
+
+\begin{frame}
+  \frametitle{Общая схема генерации сканера}
+  \begin{center}
+    \begin{tikzpicture}[start chain=going below]
+      \node[on chain,join] {Лексическая спецификация};
+      \node[on chain,join] {Набор регулярных выражений};
+      \node[on chain,join] {НКА};
+      \node[on chain,join] {ДКА};
+      \node[on chain,join] {Табличная имплементация ДКА};
+    \end{tikzpicture}
+  \end{center}
+\end{frame}
+
+\begin{frame}
+  \frametitle{Построение НКА для регулярного выражения}
+  Автоматы для базовых елементов:
+  \begin{itemize}
+    \item $\varepsilon$ (пустая строка):\\
+      \begin{tikzpicture}[-latex,node distance=2cm,auto,initial text=]
+        \node[state,initial]  (q0)                     {$q_0$};
+        \node[state,accepting](q1) [right of=q0]       {$q_1$};
+        \path (q0) edge              node {$\varepsilon$} (q1);
+      \end{tikzpicture}
+    \item a$\in \Sigma$:\\
+      \begin{tikzpicture}[-latex,node distance=2cm,auto,initial text=]
+        \node[state,initial]  (q0)                     {$q_0$};
+        \node[state,accepting](q1) [right of=q0]       {$q_1$};
+        \path (q0) edge              node {a} (q1);
+      \end{tikzpicture}
+  \end{itemize}
+  \begin{block}{Общее обозначение НКА для выражения E}
+    \begin{center}
+      \begin{tikzpicture}[-latex]
+        \draw ellipse (2cm and 0.8cm) node {E} ++(1cm,0) node[state,accepting]{};
+      \end{tikzpicture}
+    \end{center}
+  \end{block}
+\end{frame}
+
+\begin{frame}
+  \frametitle{Построение НКА для регулярного выражения}
+  Комбинации:
+  \begin{itemize}
+    \item $AB$:\\
+      \begin{tikzpicture}[-latex,initial text=,auto]
+        \draw (3cm,0) ellipse (2cm and 0.8cm) node {A} ++(1cm,0) node[state] (q0){}
+               ++(4cm,0) ellipse (2cm and 0.8cm) node {B} ++(1cm,0) node[state,accepting]{};
+        \draw (0,0) edge (1cm,0)
+              (q0) edge node {$\varepsilon$} (6cm,0);
+      \end{tikzpicture}
+    \item $A + B$:\\
+    \begin{tikzpicture}[-latex,initial text=,auto]
+      \draw (3cm,-1cm) ellipse (2cm and 0.8cm) node {A} ++(1cm,0) node[state] (qa){}
+            ++(-1cm,2cm) ellipse (2cm and 0.8cm) node {B} ++(1cm,0) node[state] (qb){};
+      
+      \node [state,initial] (q0) at (0,0) {};
+      \node [state,accepting] (q1) at (6cm,0){};
+      \draw (q0) edge node {$\varepsilon$} (1cm,-1cm)
+                 edge node {$\varepsilon$} (1cm,1cm)
+            (qa) edge node {$\varepsilon$} (q1)
+            (qb) edge node {$\varepsilon$} (q1);
+    \end{tikzpicture}
+  \end{itemize}
+\end{frame}
+
+\begin{frame}
+  \frametitle{Построение НКА для регулярного выражения}
+  \begin{itemize}
+    \item $A^*$:\\
+      \begin{tikzpicture}[-latex,initial text=,auto]
+        \draw (4cm,0) ellipse (2cm and 0.8cm) node {A} ++(1cm,0) node[state] (qa){};
+        \node [state,initial] (q0) at (0,0) {};
+        \node [state,accepting] (q1) at (8cm,0){};
+      \draw (q0) edge node {$\varepsilon$} (2cm,0)
+                 edge [bend left] node {$\varepsilon$} (q1)
+            (qa) edge node {$\varepsilon$} (q1)
+                 edge [bend left=45] node {$\varepsilon$} (q0);
+      \end{tikzpicture}
+  \end{itemize}
+\end{frame}
+
+\begin{frame}
+  \frametitle{Пример}
+  Выражение: {\LARGE $(a+b^*)c$}\\
+  (Для удобства, вершины помечены)\\
+  \begin{tikzpicture}[-latex,initial text=,auto,node distance=1.5cm]
+    \node[state,initial] (q0) {$q_0$};
+    \node[state,above right of=q0] (q1) {$q_1$};
+    \node[state,right of=q1] (q2) {$q_2$};
+    \node[state,below right of=q0] (q3) {$q_3$};
+    \node[state,right of=q3] (q4) {$q_4$};
+    \node[state,right of=q4] (q5) {$q_5$};
+    \node[state,right of=q5] (q6) {$q_6$};
+    \node[state,above right of=q6] (q7) {$q_7$};
+    \node[state,right of=q7] (q8) {$q_8$};
+    \node[state,accepting,right of=q8] (q9) {$q_9$};
+    \draw (q0) edge node {$\varepsilon$} (q1)
+               edge node {$\varepsilon$} (q3)
+          (q1) edge node {a}             (q2)
+          (q2) edge node {$\varepsilon$} (q7)
+          (q3) edge node {$\varepsilon$} (q4)
+               edge [bend left] node {$\varepsilon$} (q6)
+          (q4) edge node {b}             (q5)
+          (q5) edge node {$\varepsilon$} (q6)
+               edge [bend left] node {$\varepsilon$} (q3)
+          (q6) edge node {$\varepsilon$} (q7)
+          (q7) edge node {$\varepsilon$} (q8)
+          (q8) edge node {c}             (q9);
+  \end{tikzpicture}
+\end{frame}
+
+\begin{frame}
+  \frametitle{Преобразование НКА в ДКА}
+  \begin{block}{$\varepsilon$-замыкание}
+    {\bf $\varepsilon$-замыкание} --- Множество состояний НКА, в которые можно перейти из данного по цепочке $\varepsilon$-переходов.
+    \hrule
+    $\varepsilon\-closure(q_i)=\{q_i\}\cup\{\varepsilon\-closure(q_j) | \exists q_i\xrightarrow{\varepsilon}q_j\}$
+  \end{block}
+  Пусть S -- множество состояний НКА, s -- его начальное состояние, F -- все конечные.
+  \begin{itemize}
+    \item Каждое состояние ДКА (X) --- это подмножество (S) состояний НКА. $X\subseteq S$
+    \item Начальное состояние: $\varepsilon closure(s)$
+    \item Конечные состояния: $\{X | X\cap F \neq \varnothing\} $ 
+    \item Переходы: $\exists X\xrightarrow{a} Y \Leftrightarrow
+      Y = \bigcup\limits_{q_i} \varepsilon closure(q_i), q_i\in X$
+  \end{itemize}
+\end{frame}
+
+\begin{frame}
+  \frametitle{Пример преобразования НКА в ДКА}
+  \only<1>{
+  \begin{tikzpicture}[-latex,initial text=,auto,node distance=1.5cm]
+    \node[state,initial] (q0) {$q_0$};
+    \node[state,above right of=q0] (q1) {$q_1$};
+    \node[state,right of=q1] (q2) {$q_2$};
+    \node[state,below right of=q0] (q3) {$q_3$};
+    \node[state,right of=q3] (q4) {$q_4$};
+    \node[state,right of=q4] (q5) {$q_5$};
+    \node[state,right of=q5] (q6) {$q_6$};
+    \node[state,above right of=q6] (q7) {$q_7$};
+    \node[state,right of=q7] (q8) {$q_8$};
+    \node[state,accepting,right of=q8] (q9) {$q_9$};
+    \draw (q0) edge node {$\varepsilon$} (q1)
+               edge node {$\varepsilon$} (q3)
+          (q1) edge node {a}             (q2)
+          (q2) edge node {$\varepsilon$} (q7)
+          (q3) edge node {$\varepsilon$} (q4)
+               edge [bend left] node {$\varepsilon$} (q6)
+          (q4) edge node {b}             (q5)
+          (q5) edge node {$\varepsilon$} (q6)
+               edge [bend left] node {$\varepsilon$} (q3)
+          (q6) edge node {$\varepsilon$} (q7)
+          (q7) edge node {$\varepsilon$} (q8)
+          (q8) edge node {c}             (q9);
+  \end{tikzpicture}
+  }
+  \only<2>{
+    \begin{tikzpicture}[-latex,initial text=,auto,node distance=1.5cm]
+      \node[state,fill=red!40,initial] (q0) {$q_0$};
+      \node[state,fill=red!40,above right of=q0] (q1) {$q_1$};
+      \node[state,right of=q1] (q2) {$q_2$};
+      \node[state,fill=red!40,below right of=q0] (q3) {$q_3$};
+      \node[state,fill=red!40,right of=q3] (q4) {$q_4$};
+      \node[state,right of=q4] (q5) {$q_5$};
+      \node[state,fill=red!40,right of=q5] (q6) {$q_6$};
+      \node[state,fill=red!40,above right of=q6] (q7) {$q_7$};
+      \node[state,fill=red!40,right of=q7] (q8) {$q_8$};
+      \node[state,fill=black!20,accepting,right of=q8] (q9) {$q_9$};
+      \draw (q0) edge node {$\varepsilon$} (q1)
+                 edge node {$\varepsilon$} (q3)
+            (q1) edge node {a}             (q2)
+            (q2) edge node {$\varepsilon$} (q7)
+            (q3) edge node {$\varepsilon$} (q4)
+                 edge [bend left] node {$\varepsilon$} (q6)
+            (q4) edge node {b}             (q5)
+            (q5) edge node {$\varepsilon$} (q6)
+                 edge [bend left] node {$\varepsilon$} (q3)
+            (q6) edge node {$\varepsilon$} (q7)
+            (q7) edge node {$\varepsilon$} (q8)
+            (q8) edge node {c}             (q9);
+    \end{tikzpicture}
+  }
+  \only<3>{
+    \begin{tikzpicture}[-latex,initial text=,auto,node distance=1.5cm]
+      \node[state,fill=red!40,initial] (q0) {$q_0$};
+      \node[state,fill=red!40,above right of=q0] (q1) {$q_1$};
+      \node[state,green!40!black,right of=q1] (q2) {$Q_2$};
+      \node[state,fill=red!40,below right of=q0] (q3) {$q_3$};
+      \node[state,fill=red!40,right of=q3] (q4) {$q_4$};
+      \node[state,right of=q4] (q5) {$q_5$};
+      \node[state,fill=red!40,right of=q5] (q6) {$q_6$};
+      \node[state,green!40!black,fill=red!40,above right of=q6] (q7) {$Q_7$};
+      \node[state,green!40!black,fill=red!40,right of=q7] (q8) {$Q_8$};
+      \node[state,fill=black!20,accepting,right of=q8] (q9) {$q_9$};
+      \draw (q0) edge node {$\varepsilon$} (q1)
+                 edge node {$\varepsilon$} (q3)
+            (q1) edge node {a}             (q2)
+            (q2) edge node {$\varepsilon$} (q7)
+            (q3) edge node {$\varepsilon$} (q4)
+                 edge [bend left] node {$\varepsilon$} (q6)
+            (q4) edge node {b}             (q5)
+            (q5) edge node {$\varepsilon$} (q6)
+                 edge [bend left] node {$\varepsilon$} (q3)
+            (q6) edge node {$\varepsilon$} (q7)
+            (q7) edge node {$\varepsilon$} (q8)
+            (q8) edge node {c}             (q9);
+    \end{tikzpicture}
+  }
+  \only<4->{
+    \begin{tikzpicture}[-latex,initial text=,auto,node distance=1.5cm]
+      \node[state,fill=red!40,initial] (q0) {$q_0$};
+      \node[state,fill=red!40,above right of=q0] (q1) {$q_1$};
+      \node[state,green!40!black,right of=q1] (q2) {$Q_2$};
+      \node[state,fill=red!50!blue!60,below right of=q0] (q3) {$q_3$};
+      \node[state,fill=red!50!blue!60,right of=q3] (q4) {$q_4$};
+      \node[state,fill=blue!40,right of=q4] (q5) {$q_5$};
+      \node[state,fill=red!50!blue!60,right of=q5] (q6) {$q_6$};
+      \node[state,green!40!black,fill=red!50!blue!60,above right of=q6] (q7) {$Q_7$};
+      \node[state,green!40!black,fill=red!50!blue!60,right of=q7] (q8) {$Q_8$};
+      \node[state,fill=black!20,accepting,right of=q8] (q9) {$q_9$};
+      \draw (q0) edge node {$\varepsilon$} (q1)
+                 edge node {$\varepsilon$} (q3)
+            (q1) edge node {a}             (q2)
+            (q2) edge node {$\varepsilon$} (q7)
+            (q3) edge node {$\varepsilon$} (q4)
+                 edge [bend left] node {$\varepsilon$} (q6)
+            (q4) edge node {b}             (q5)
+            (q5) edge node {$\varepsilon$} (q6)
+                 edge [bend left] node {$\varepsilon$} (q3)
+            (q6) edge node {$\varepsilon$} (q7)
+            (q7) edge node {$\varepsilon$} (q8)
+            (q8) edge node {c}             (q9);
+    \end{tikzpicture}
+  }
+  \onslide<5>{
+  \makebox[\textwidth][r]{
+    \begin{tikzpicture}[-latex,initial text=,auto,node distance=2.5cm]
+      \node[state,fill=red!40,initial]    (q1)
+                             {$q_{0,1,3,4,6,7,8}$};
+      \node[state,fill=blue!40]           (q2)
+         [below right of=q1] {$q_{3,4,5,6,7,8}$};
+      \node[state,green!40!black]          (q3)
+         [above right of=q1] {$Q_{2,7,8}$};
+      \node[state,accepting,fill=black!20](q4)
+         [above right of=q2] {$q_9$};
+      \draw (q1) edge              node {b} (q2)
+                 edge              node {a} (q3)
+                 edge              node {c} (q4)
+            (q2) edge              node {c} (q4)
+                 edge [loop right] node {b} (q2)
+            (q3) edge              node {c} (q4);
+    \end{tikzpicture}
+  }}
+\end{frame}
+
+%\fi
+
+\begin{frame}
+  \frametitle{Табличная имплементация}
+  \begin{columns}
+    \column{0.55\textwidth}
+    \begin{table}
+      \begin{tabular}{l|| c | c | c}
+        A     & a             & b            &    c \\
+        \hline
+        $q_1$ & $q_3$         & $q_2$         & $q_4$ \\
+        $q_2$ & $\varnothing$ & $q_2$         & $q_4$ \\
+        $q_3$ & $\varnothing$ & $\varnothing$ & $q_4$  \\
+        $q_4$ & $\varnothing$ & $\varnothing$ & $\varnothing$\\
+      \end{tabular}
+    \end{table}
+    (define (go state input)\\
+    \ \ (let ((next (gethash '(state input))))\\
+    \ \ \ \ \ \ (if next\\
+    \ \ \ \ \ \ \ \ \ (go next (move (forward input)))\\
+    \ \ \ \ \ \ \ \ \#f)))\\
+    (define (accept input)\\
+    \ \ (let ((rez (go n input)))\\
+    \ \ \ \ (and rez (accepting? rez))))\\
+
+    \column{0.45\textwidth}
+    \begin{tikzpicture}[-latex,initial text=,auto,node distance=2.5cm]
+      \node[state,fill=red!40,initial]    (q1) {$q_1$};
+      \node[state,fill=blue!40]           (q2) [below right of=q1] {$q_2$};
+      \node[state,green!40!black]         (q3) [above right of=q1] {$q_3$};
+      \node[state,accepting,fill=black!20](q4) [above right of=q2] {$q_4$};
+      \draw (q1) edge              node {b} (q2)
+                 edge              node {a} (q3)
+                 edge              node {c} (q4)
+            (q2) edge              node {c} (q4)
+                 edge [loop below] node {b} (q2)
+            (q3) edge              node {c} (q4);
+    \end{tikzpicture}
+  \end{columns}
+\end{frame}
+%Когда дойдёт до лексера, заметить, что он матчит самую длинную лексему, и из одинаковых выбирает по приоритету
+% + обнаружение ошибок - выражение допускающее всё, с наименьшим приоритетом
+
+\end{document}
+
+

@@ -1,0 +1,61 @@
+\documentclass[a4,12pt]{article}
+
+%AMS-TeX packages
+\usepackage{amssymb,amsmath,amsthm} 
+%geometry (sets margin) and other useful packages
+\usepackage[margin=1in]{geometry}
+\usepackage{graphicx,ctable,booktabs}
+\usepackage[utf8]{inputenc}
+\usepackage[english,russian]{babel}
+\usepackage{tikz}
+\usepackage{color}
+\usepackage{geometry}
+\usepackage[pdftex,
+            pdfauthor={Denis Anisimov},
+            pdftitle={Parser quiz},
+            pdfsubject={MIPT-Scheme Compiler},
+            pdfkeywords={mipt, scheme, compiler}]{hyperref}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+%
+%Contents of problem set
+%    
+\begin{document}
+
+\title{Синтаксический анализ. \\
+      {\small  MIPT Scheme compiler }}
+\date{15.12.12}
+
+\maketitle
+
+\thispagestyle{empty}
+
+Рассмотрим грамматику:
+\begin{align*}
+  S &\rightarrow (L) \: \mid \: a \\
+  L &\rightarrow L,S \: \mid \: S
+\end{align*}
+
+\begin{enumerate}
+  \item (1) Что в ней является терминалами, нетерминалами, стартовым символом?
+  \item (1) Постройте деревья разбора, левое и правое порождение для следующих предложений:
+    \begin{enumerate}
+      \item $(a,a)$
+      \item $(a,(a,a))$
+      \item $(a,((a,a),(a,a)))$
+    \end{enumerate}
+  \item (1) Устраните \textit{все} неоднозначности из данной грамматики.
+  \item (2) Напишите последовательность порождений для анализатора, работающего по методу рекурсивного спуска с откатом, для строки $(a,((a),a))$
+  \item (3) Постройте множества FIRST и FOLLOW.
+  \item (4) Постройте таблицу разбора предиктивного анализатора.
+  \item (1) Постройте правое порождение для $(a,(a,a))$ и покажите основы каждой правосентенциальной формы.
+  \item (1) Покажите шаги ПС-анализатора и соответствующее построение дерева разбора для порождения из \textbf{7.}
+  \item (1) Постройте замыкание для пункта $S \rightarrow (\cdot L)$
+  \item (1) Постройте операцию $goto(I,L)$, где $I$ - замыкание из \textbf{9.}
+  \item (3) Постройте каноническую систему множеств LR(0)-пунктов.
+  \item (3) Постройте ДКА, соответствующий переходам $goto$ для канонической системы LR(0)-пунктов.
+  \item (4) Постройте таблицу действий и таблицу переходов SLR-анализатора.
+\end{enumerate}
+
+\end{document}

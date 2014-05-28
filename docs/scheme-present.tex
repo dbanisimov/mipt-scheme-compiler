@@ -1,0 +1,518 @@
+\documentclass[16pt,pdf,unicode]{beamer}
+
+\usepackage[utf8]{inputenc}
+\usepackage[english,russian]{babel}
+\usepackage{listings}
+\usepackage{tikz}
+\usepackage{color}
+\usepackage{geometry}
+
+
+\usetikzlibrary{chains}
+\usetikzlibrary{shapes,arrows}
+
+\usetheme{Boadilla}
+\setbeamercovered{transparent}
+\lstset{ language=Lisp }
+
+\title[Знакомство со Scheme]{Знакомство с языком scheme: основные особенности}
+\author[А.Ю. Заостровных]{Заостровных Арсений Юрьевич}
+\institute[МФТИ]{Московский физико-технический университет\\
+	{\tiny государственный университет}\\}
+\date[2012]{МФТИ, 15 сентября 2012 года}
+
+\begin{document}
+
+%\iffalse 
+
+\begin{frame}[plain]
+\maketitle
+\end{frame}
+
+\begin{frame}
+\frametitle{Почему scheme?}
+\begin{itemize}
+\item Простота языка: не требуется тонны синтаксических правил
+\item Богатство современными технологиями позволит детально разобраться в них.
+\item Язык является основой знаменитого курса MIT - SICP (Structure and Interpretation of Computer Programs)
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Scheme - мощный язык}
+\begin{itemize}
+\item Макросы
+\item Автоматическое управление памятью
+\item Функции высших порядков
+\item Ленивые вычесления
+\item ... и многое другое
+\vspace{15 mm}
+\item Квайн: ((lambda (x) `(,x ',x)) '(lambda (x) `(,x ',x)))
+\item<2> Квайн для придирчивых:\\
+  ((lambda (x) (write `(,x ',x))) '(lambda (x) (write `(,x ',x))))
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Scheme - простой язык}
+\begin{itemize}
+\item Парсер занимает меньше 200 строк кода
+\item Всего 2 грамматических элемента:
+  \begin{enumerate}
+    \item атом
+    \item список
+  \end{enumerate}
+\item Никаких выведений типов: динамическая типизация
+\item Беззаботное программирование: автоматическая сборка мусора
+\end{itemize}
+\end{frame}
+
+\section{Синтаксис}
+
+\begin{frame}
+\frametitle{Основные лексемы}
+\begin{itemize}
+\item Различные скобки: (,),[,],\#(, \#vu8(,
+\item Символы: sym, add, +, \%\#?!, ...
+  \begin{itemize}
+    \item Регистроиндифферентны
+  \end{itemize}
+\item Числа: 42, 3.1415, -.6L0, 1.3 - 2.7i, -1.2@15
+\item Булевы значения: \#f, \#t
+\item Знаки \#$\backslash$0, \#$\backslash\backslash$, \#$\backslash$newline, \#$\backslash$\ , \#$\backslash$03bb
+\item Строки ''string'',  '''', ''$\backslash$x41;bc''
+\item Кавычки ', `, ,, ,@
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+  \frametitle{Грамматика}
+  \begin{itemize}
+    \item Атом a, +, \#f, 84, ...
+    \item Точечная пара(cons-ячейка) (a . b)
+    \item Список (), (a b), (a . (b . ())), (a b c 33 \#f ()), ((()()))
+    \item Вектор \#(1 3 () \#t)
+    \item Битовый вектор \#vu8(0 1 1 0 1)
+  \end{itemize}
+\end{frame}
+
+\begin{frame}
+  \frametitle{Семантика}
+  Общее правило: голова списка - исполнитель, тело - его аргументы.\\
+  Три вида исполнителей:
+  \begin{itemize}
+   \item Специальные формы
+     \begin{itemize}
+       \item (define a 3) $\rightarrow$ привязка значения 3 к a
+       \item (if a b c) $\rightarrow$ выполнение только одной ветви
+     \end{itemize}
+   \item Функции
+     \begin{itemize}
+     \item (cons a b) $\rightarrow$ (a . b)
+     \item (+ 1 2 3 4) $\rightarrow$ 10
+     \end{itemize}
+   \item Макросы
+     \begin{itemize}
+     \item (+= a b) $\rightarrow$ (set! a (+ a b))
+     \item Перевычисляются
+     \end{itemize}
+  \end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Соглашение о наименовании}
+\begin{itemize}
+  \item Все символы (идентификаторы) записываются в нижнем регистре, слова разделяются знаком ``-''
+  \item Предикаты оканчиваются на вопросительный знак - ``?''
+  \item Процедура изменяющая свои аргументы - на ``!''
+\end{itemize}
+\end{frame}
+
+\section{Исполнение}
+\begin{frame}
+\frametitle{Основные понятия}
+\begin{itemize}
+\item Ссылка
+\item Область видимости
+\item Время жизни
+\item Вложенный блок
+\item Предметно ориентированный язык
+\item Контекст
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Специальные формы}
+\begin{itemize}
+  \item {\bf define} добавляет переменную в текущий блок
+  \item {\bf if} альтернирует последовательность исполнения
+  \item {\bf set!} меняет значение существующей переменной
+  \item {\bf lambda} создаёт функцию
+  \item {\bf quote, etc.} Блокирует вычисление некоторых выражений
+  \item {\bf define-syntax} создаёт трансформатор выражений (макрос)
+  \item {\bf begin} склеивает несколько выражений в одно
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Функции}
+\begin{block}{Встроенные функции}
+cons, car, cdr, +, =, eq?, vector-ref, make-string, port?, 
+write, read, apply, map, string=?, string-set! ...
+\end{block}
+\begin{block}{Функции высших порядков}
+(map sq '(1 2 3 4)) $\rightarrow$ (1 4 9 16)\\
+(reduce + '(1 2 3 4)) $\rightarrow$ 10
+\end{block}
+\begin{block}{Определение собственной функции}
+(define (sq x) (* x x))\\
+(define foo (lambda (a b c) (= (+ (sq a) (sq b)) (sq c))))
+\end{block}
+\end{frame}
+
+\begin{frame}
+\frametitle{Рекурсия}
+\begin{minipage}{0.5\linewidth}
+  
+  {\bf Реку́рсия} — процесс повторения элементов самоподобным образом.
+  \begin{itemize}
+  \item {\bf Хвостовая рекурсия} — специальный случай рекурсии, при котором рекурсивный вызов функцией самой себя является её последней операцией.
+    
+  \end{itemize}
+\end{minipage}
+\hspace{0.05\linewidth}
+\begin{minipage}{0.38\linewidth}
+          \includegraphics[scale=0.3]{recursion.jpg}
+\end{minipage}
+\end{frame}
+\begin{frame}
+\frametitle{Хвостовая рекурсия}
+\begin{columns}
+  \column{0.45\textwidth}
+\only<1>{
+  \begin{block}?
+
+(define (factorial n)\\
+\ \ (define (fac-times n acc)\\
+\ \ \ \ (if (= n 0)\\
+\ \ \ \ \ \ acc\\
+\ \ \ \ \ \ (fac-times (- n 1) (* acc n))))\\
+\ \ (fac-times n 1))
+
+  \end{block}
+}
+\only<2>{
+  \begin{exampleblock}{Хвостовая рекурсия}
+
+(define (factorial n)\\
+\ \ (define (fac-times n acc)\\
+\ \ \ \ (if (= n 0)\\
+\ \ \ \ \ \ acc\\
+\ \ \ \ \ \ (fac-times (- n 1) (* acc n))))\\
+\ \ (fac-times n 1))
+  \end{exampleblock}
+}
+
+  \column{0.45\textwidth}
+\only<1>{
+  \begin{block}?
+(define (factorial n)\\
+\ \ (if (= n 0)\\
+\ \ \ \ 1\\
+\ \ \ \ (* n (factorial (- n 1)))))\\
+  \end{block}
+}
+\only<2>{
+  \begin{alertblock}{{\emНе} хвостовая рекурсия}
+(define (factorial n)\\
+\ \ (if (= n 0)\\
+\ \ \ \ 1\\
+\ \ \ \ (* n (factorial (- n 1)))))\\
+  \end{alertblock}
+}
+\end{columns}
+\end{frame}
+
+\begin{frame}
+  \frametitle{Функциональный стиль}
+  \begin{block}{Сумма чисел от 0 до 150}
+    \begin{columns}
+      \column{0.45\textwidth}
+      (let ((sum 0))\\
+      \ \ (do ((i 0 (+ i 1))\\
+      \ \ \ \ \ \ ((< i 150) sum)\\
+      \ \ \ \ (set! sum (+ sum i)))))\\
+      \column{0.45\textwidth}
+      (reduce + (range 0 150))
+    \end{columns}
+  \end{block}
+  \begin{block}{Длина списка}
+    \begin{columns}
+      \column{0.45\textwidth}
+      (define (length lst)\\
+      \ \ (let ((len 0))\\
+      \ \ \ \ \ (do ((c lst (cdr c)))\\
+      \ \ \ \ \ \ \ \ \ ((null? c) len)\\
+      \ \ \ \ \ \ \ (set! len (+ len 1))))) 
+      \column{0.45\textwidth}
+      (define (length lst)\\
+      \ \ (if (null? lst)\\
+      \ \ \ \ 0\\
+      \ \ \ \ (+ 1 (length (cdr lst)))))
+    \end{columns}
+  \end{block}
+\end{frame}
+
+\begin{frame}
+\frametitle{Множественные значения}
+Множественные значения не допустимы в контексте, ожидающем единственное значение.
+\begin{itemize}
+  \item ({\bf values} a b c ...) -- Создание многозначной величины
+  \item ({\bf let-values} (((a b c) (foo)) ...) ...) -- ``Потрошение'' множественного значения
+  \item ({\bf call-with-values} generator receiver) -- Трансляция множественного значения, произведённого generator'ом, receiver'у.
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+  \frametitle{Замыкание}
+  {\bf \emph{Замыкание}} -- функция, в теле которой присутствуют ссылки на переменные, объявленные вне тела этой функции и не в качестве её параметров (а в окружающем коде).
+\begin{exampleblock}{Пример}
+  ({\bf define} (make-counter)\\
+  \ \ ({\bf let} ((c 0))\\
+  \ \ \ \ ({\bf values} ({\bf lambda} () ({\bf set!} c (+ c 1)))\\
+  \ \ \ \ \ \ \ \ \ \ \ \ \ \ ({\bf lambda} () c))))\\
+  \vspace{0.5cm}
+  ({\bf let-values} (((incr1 val1) (make-counter))\\
+  \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ ((incr2 val2) (make-counter)))\\
+  \ \ (incr1) (incr2) (incr1)\\
+  \ \ (incr2) (incr2) ({\bf format} ``$\sim$ a, $\sim$ a'' (val1) (val2))) ; $\rightarrow$ 2, 3
+\end{exampleblock}
+\end{frame}
+
+\begin{frame}
+\frametitle{Ленивые вычисления (обещания)}
+\begin{itemize}
+\item ``Обещание'' - объект языка, содержащий всё необходимое для вычисления некоторого выражения.
+\item ({\bf delay} выражение): создаёт ``обещание'' вычисления выражения.
+\item ({\bf force} обещание): вычисляет ``обещание''. Если оно уже было однажды вычислено, использует кешированное значение.
+\item {\bf promise?} -- предикат ``обещания''
+\item {\bf promise-forced?} -- предикат кеша
+\item {\bf promise-value} -- извлечение значения только из кеша.
+\end{itemize}
+Пример:\\
+(force (delay (+ 1 2))) ;$\rightarrow$ 3
+\end{frame}
+
+%\fi
+
+\section{Макросы}
+\begin{frame}
+  \begin{center}
+    \structure{\Huge \insertsection}
+  \end{center}
+\end{frame}
+
+\begin{frame}
+\frametitle{Необходимость макросов}
+\begin{itemize}
+\item Изменение контекста\\
+  (push! 'a lst) $\rightarrow$ (set! lst (cons 'a lst))
+\item Последовательность исполнения\\
+  (let ((a \#f) (b \#f))  (or (set! a \#t) (set! b \#t)) ) $\rightarrow$ \#t; a=\#t, b=\#f
+\item Создание привязок\\
+  (let ((x 0)) x) $\rightarrow$ ((lambda (x) x) 0)
+\item Автоматическое управление ресурсами\\
+  (with-file (file ``a.in'') (print (read file))) $\rightarrow$\\
+  (let ((file (open-file ``a.in''))) (print (read file)) (close-file file))
+\item Определение предметно-ориентированного языка\\
+  (destructuring-bind (a (c . e))) (foo) (print c)) $\rightarrow$\\
+  (let ((val (foo)))\\
+  \ \ (let ((a (car val))\\
+  \ \ \ \ \ \ \ \ (c (car (car (cdr val))))\\
+  \ \ \ \ \ \ \ \ (e (cdr (car (cdr val)))))\\
+  \ \ \ \ (print c)))
+\end{itemize}
+\end{frame}
+
+%\fi
+
+\begin{frame}
+\frametitle{Раскрытие (подстановка) макроса}
+\begin{block}{}
+ (define-syntax f foo)
+\end{block}
+\vspace{0.5cm}
+
+\tikzset{
+	commonnode/.style={
+		rectangle, 
+		rounded corners, 
+		draw=black, thick,
+		minimum height=1.5cm, 
+		text centered, 
+		font=\smaller,
+                fill=blue!10,
+		on chain},
+		every node/.style={text width=5.5cm},
+		every join/.style={->, thick,shorten >=1pt},
+}
+\hyphenpenalty=10000 
+\begin{tikzpicture}
+\begin{scope}
+[node distance=.5cm,	start chain=going right]
+	\node[commonnode, join](first) {``Обертка'' аргументов (f~a~b) $\rightarrow$ \#<syntax~(a~b)>};
+	\node[commonnode, join] (last){Вызов обработчика (foo~\#<syntax~(a~b)>) $\rightarrow$ \#<syntax s>} ;
+\end{scope}%TODO: Запретить переносы в середине слов!!
+\begin{scope}
+[node distance=1.9cm,	start chain=going left]
+	\node[commonnode, join, anchor=north west] (preob) at ([commonnode, yshift=-0.9cm] last.south west)
+             {Подстановка результатов \#<syntax~s> на место вызова};
+        \node[draw=black, thick, on chain, text badly centered,
+              text width=2cm, fill=blue!10, inner sep=-0.1cm, diamond, join](ques)
+             { Остались нераскрытые макросы? };
+\end{scope}
+\begin{scope}
+	\node[commonnode, fill=green!10, anchor=north](finish) at ([commonnode, yshift=-0.2cm, xshift=1cm] ques.south)
+             {Исполнение полученного кода};
+\end{scope}
+\begin{scope}
+	\draw [->, thick] (last.south) -- (preob.north);
+	\draw [->, thick] (ques) -- (finish);
+	\draw [->, thick] (ques) -- (first);
+\end{scope}
+\end{tikzpicture}
+\end{frame}
+
+\begin{frame}
+\frametitle{Пример макроса}
+\begin{block}{}
+  (define-syntax swap!\\
+  \ \ (sc-macro-transformer\\
+  \ \ \ \ (lambda (exp usage-env)\\
+  \ \ \ \ \ \ (let ((a (cadr exp)) (b (caddr exp)))\\
+  \ \ \ \ \ \ \ \ `(let ((tmp ,a)) (set! ,a ,b) (set! ,b tmp))))))
+\end{block}
+\begin{exampleblock}{Раскрытие}
+\begin{itemize}
+  \item (swap! x y) ; $\rightarrow$
+  \item (let ((tmp x)) (set! x y) (set! y tmp))
+\end{itemize}
+\end{exampleblock}
+\end{frame}
+
+\begin{frame}
+\frametitle{syntax-rules}
+\begin{itemize}
+  \item Гигиеничны:
+    Автоматически распознают все символы не входящие в аргументы макросы, и переименовывает их.
+  \item Прозрачны:
+    Поддержывают лексическую область видимости.
+  \item Лаконичны:
+    Имеют собственный язык шаблонов.
+  \item Закрыты:
+    Нет возможности вызвать функцию, что позволяет разделить стадии компилляции и исполнения.
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Синтаксис syntax-rules}
+\begin{block}{}
+({\bf syntax-rules} (литералы ...)\\
+\ \ ((образец замена) ...))
+\end{block}
+\begin{itemize}
+  \item {\bf оригинал} -- выражение, подвергающееся раскрытию макроса
+  \item {\bf литералы} -- символы в образце совпадающие точно по имени
+  \item {\bf образец} -- дерево (список списков), состоящее из символов (идентификаторов, литералов и ``...'').
+  \item {\bf замена} -- произвольное выражение, в котором идентификаторы из образца будут заменены на подвыражения из оригинала.
+\end{itemize}
+$\bullet$ В образце может встретиться символ ..., который трактуется особо - он собирает в себя остаток текущего списка.\\
+$\bullet$ В замене, на место ... вклеивается соответствующий список из оригинала.
+\end{frame}
+
+\begin{frame}
+\frametitle{Примеры}
+\begin{block}{}
+  (define-syntax swap!\\
+  \ \ (syntax-rules ()\\
+  \ \ \ \ ((swap! a b) (let ((tmp a)) (set! a b) (set! b tmp)))))
+\end{block}
+
+\begin{block}{}
+  (define-syntax let\\
+  \ \ (syntax-rules ()\\
+  \ \ \ \ ((let ((var val)...) body ...)\\
+  \ \ \ \ \ ((lambda (var ...) body ...) val ...))))
+\end{block}
+
+\end{frame}
+
+\begin{frame}
+\frametitle{Проблемы макроподстановок: захват}
+\begin{block}{Определение}
+(define-syntax swap!\\
+\ \ (syntax-rules () ((swap! a b) (let ((tmp a)) (set! a b) (set! b tmp)))))
+\end{block}
+\begin{block}{}
+  (swap! x tmp)
+\end{block}
+\centering{\huge{$\Downarrow$}}
+\begin{columns}
+  \column{0.45\textwidth}
+\begin{alertblock}{Тривиальное раскрытие}
+  (let ((tmp x))\\
+  \ \ (set! x tmp)\\
+  \ \ (set! tmp tmp))\\
+  ; $\rightarrow$ значения x и tmp остались прежними.
+\end{alertblock}
+  \column{0.45\textwidth}
+\begin{exampleblock}<2>{Гигиеничное раскрытие}
+  (let ((tmp1 x))\\
+  \ \ (set! x tmp)\\
+  \ \ (set! tmp tmp1))
+\end{exampleblock}
+\end{columns}
+\end{frame}
+
+\begin{frame}
+\frametitle{Проблемы макроподстановок: сокрытие}
+\begin{block}{Определение}
+  (define mem '())\\
+  (define-syntax remember-if\\
+  \ \ (syntax-rules () ((\_ cond val) (if cond (push! val mem)))))
+\end{block}
+\begin{block}{}
+  (let ((mem \#(1 2))) (remember-if \#t mem))
+\end{block}
+\centering{\huge{$\Downarrow$}}
+\begin{columns}
+  \column{0.45\textwidth}
+\begin{alertblock}{Тривиальное раскрытие}
+  (let ((mem \#(1 2)))\\
+  \ \ (if \#t (push! mem mem)))\\
+  ; $\rightarrow$ Ошибка!
+\end{alertblock}
+  \column{0.45\textwidth}
+\begin{exampleblock}<2>{Прозрачное раскрытие}
+  (define mem1 mem)\\
+  (let ((mem \#(1 2)))\\
+  \ \ (if \#t (push! mem mem1)))
+\end{exampleblock}
+\end{columns}
+\end{frame}
+
+\begin{frame}
+\frametitle{Остались неупомянутыми}
+\begin{itemize}
+\item Интернирование
+\item Продолжения (continuations)
+\item Исключительные ситуации
+\item Ввод/вывод
+\item Структуры
+\item Что-то ещё?
+\end{itemize}
+\end{frame}
+
+\end{document}
+
+

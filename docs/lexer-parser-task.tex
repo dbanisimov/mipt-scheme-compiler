@@ -1,0 +1,151 @@
+\documentclass[twocolumn,a4,10pt]{article}
+
+%AMS-TeX packages
+\usepackage{amssymb,amsmath,amsthm} 
+%geometry (sets margin) and other useful packages
+\usepackage[margin=1in]{geometry}
+\usepackage{graphicx,ctable,booktabs}
+\usepackage[utf8]{inputenc}
+\usepackage[english,russian]{babel}
+\usepackage{listings}
+\usepackage{tikz}
+\usepackage{color}
+\usepackage{geometry}
+\usepackage[pdftex,
+            pdfauthor={Arseniy Zaostrovnykh, Denis Anisimov},
+            pdftitle={Lexer and Parser quiz},
+            pdfsubject={MIPT-Scheme Compiler},
+            pdfkeywords={mipt, scheme, compiler}]{hyperref}
+
+\usetikzlibrary{positioning}
+\usetikzlibrary{automata}
+
+\lstset{ language=Lisp,
+         showspaces=false,
+         morekeywords={define, begin, car, cdr}}
+
+%
+%Redefining sections as problems
+%
+\makeatletter
+\newenvironment{problem}{\@startsection
+       {section}
+       {1}
+       {-.2em}
+       {-3.5ex plus -1ex minus -.2ex}
+       {2.3ex plus .2ex}
+       {\pagebreak[3]%forces pagebreak when space is small; use \eject for better results
+       \large\bf\noindent{Задача }
+       }
+       }
+       {%\vspace{1ex}\begin{center} \rule{0.3\linewidth}{.3pt}\end{center}}
+       \begin{center}\large\bf \ldots\ldots\ldots\end{center}}
+\makeatother
+
+
+%
+%Fancy-header package to modify header/page numbering 
+%
+\usepackage{fancyhdr}
+\pagestyle{fancy}
+%\addtolength{\headwidth}{\marginparsep} %these change header-rule width
+%\addtolength{\headwidth}{\marginparwidth}
+\lhead{Задача \thesection}
+\chead{} 
+\rhead{\thepage} 
+\lfoot{\small\scshape MIPTScheme} 
+\cfoot{} 
+\rfoot{\footnotesize iLab МФТИ} 
+\renewcommand{\headrulewidth}{.3pt} 
+\renewcommand{\footrulewidth}{.3pt}
+\setlength\voffset{-0.25in}
+\setlength\textheight{648pt}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+%
+%Contents of problem set
+%    
+\begin{document}
+
+\title{Лексический анализ. Синтаксический анализ. \\
+      {\small  MIPT Scheme compiler }}
+%\author{Арсений Заостровных, Денис Анисимов}
+\date{24.11.12}
+
+\maketitle
+
+\thispagestyle{empty}
+
+\begin{problem}{\it Регулярные выражения}
+Составте регулярные выражения для:
+\begin{enumerate}
+\item Шестнадцатиричного числа, начинающегося с \#x (\#x110, \#xA3f)
+\item Времени в двенадцати часовом формате (12:00 AM, 09:32 PM, 01:33 AM)
+\item Е-mail адреса (user.x@example.info)
+\end{enumerate}
+\end{problem}
+
+\begin{problem}{\it Конечные автоматы}
+Для конечного автомата:
+  
+      \begin{tikzpicture}[node distance=2cm,auto,initial text=]
+        \node[state,initial]   (q1)                     {$q_1$};
+        \node[state]           (q2) [right of=q1]       {$q_2$};
+      	\node[state,accepting] (q3) [below right of=q2] {$q_3$};
+      	\node[state,accepting] (q4) [left of=q3]        {$q_4$};
+        \draw[->,thick,bend left] (q1) edge node {a} (q2);
+        \draw[->,thick,bend left] (q2) edge node {b} (q1);
+        \draw[->,thick,bend left] (q2) edge node {c} (q3);
+        \draw[->,thick,bend left] (q3) edge node {d} (q4);
+        \draw[->,thick,bend left] (q4) edge node {d} (q3);
+        \draw[->,thick,bend left] (q4) edge node {d} (q1);
+      \end{tikzpicture}
+
+Напишите последовательность состояний и результат обработки следующих строк:
+\begin{enumerate}
+\item aaabacd
+\item acddababac
+\item abacdd
+\end{enumerate}
+$\bullet$ В чем различия детерменированного и недетерменированного конечных автоматов?
+\end{problem}
+
+\begin{problem}{\it Эквивалентность}
+\begin{enumerate}
+\item Нарисуйте конечный автомат, эквивалентный регулярному выражению $(a|(bc)^*)^+c$
+\item Выпишите регулярное выражение, эквивалентное конечному автомату из задачи 2.
+\end{enumerate}
+\end{problem}
+
+\begin{problem}{\it Неоднозначность}
+  Рассмотрим грамматику:
+    $$ S \rightarrow aSbS \: \mid \: bSaS \: \mid \: \varepsilon $$
+    Покажите, что эта грамматика неоднозначна, построив два различных левых порождения для предложения $abab$.
+\end{problem}
+
+\begin{problem}{\it Левая рекурсия}
+ Рассмотрим грамматику:
+    \begin{align*}
+      &E \rightarrow E + T \: \mid \: \ T \\
+      &T \rightarrow \textbf{id} \: \mid \: (E) 
+    \end{align*}
+  Напишите грамматику корректно устраняющую левую рекурсию из данной.
+\end{problem}
+
+\begin{problem}{\it Метод рекурсивного спуска}
+ Рассмотрим грамматику:
+    \begin{align*}
+      &E \rightarrow E' \mid E' + E \\
+      &E' \rightarrow -E' \mid \textbf{id} \mid (E)
+    \end{align*}
+    И входную строку:
+      $$ \textbf{id} + \textbf{id} $$
+    \begin{enumerate}
+      \item Измените исходную грамматику так, чтобы она была совместима с методом рекурсивного спуска.
+      \item Напишите последовательность порождений, выполняемую в методе рекурсивного спуска с новой грамматикой. Укажите \textit{все} порождения, т.е. включая неверные, после которых был откат.    
+    \end{enumerate}
+   
+\end{problem}
+
+\end{document}

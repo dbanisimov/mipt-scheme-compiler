@@ -1,0 +1,340 @@
+\documentclass[16pt,pdf,unicode]{beamer}
+
+\usepackage[utf8]{inputenc}
+\usepackage[english,russian]{babel}
+\usepackage{listings}
+\usepackage{algpseudocode}
+\usepackage{tikz}
+\usepackage{color}
+\usepackage{geometry}
+\usepackage{multirow}
+
+\usetikzlibrary{positioning}
+\usetikzlibrary{automata}
+\usetikzlibrary{chains}
+\usetikzlibrary{shapes,arrows}
+\usetikzlibrary{intersections}
+\usetikzlibrary{calc} % for manimulation of coordinates
+\tikzset{
+    invisible/.style={opacity=0},
+    visible on/.style={alt=#1{}{invisible}},
+    alt/.code args={<#1>#2#3}{%
+      \alt<#1>{\pgfkeysalso{#2}}{\pgfkeysalso{#3}} % \pgfkeysalso doesn't change the path
+    },
+  }
+
+\usetheme{Boadilla}
+\setbeamercovered{transparent}
+%\lstset{ language=Lisp }
+
+\title[Синтаксический анализ]{Теория и практика компилляции программ: синтаксический анализ, часть II}
+\author[Д. Анисимов]{Денис Анисимов}
+\institute[МФТИ]{Московский физико-технический университет\\
+	{\tiny государственный университет}\\}
+\date[24.11.2012]{МФТИ, 24 ноября 2012 года}
+
+\begin{document}
+
+\begin{frame}[plain]
+\setcounter{framenumber}{0}
+\titlepage
+\end{frame}
+
+\section{Предиктивный анализатор}
+\subsection{Обзор}
+\begin{frame}
+\frametitle{Предиктивный анализатор}
+\begin{itemize}
+  \item Попытаемся построить синтаксический анализатор без откатов. 
+  \item Для каждого входного символа $a$ и продукций $A \rightarrow \alpha_1\dots\alpha_n$ мы должны однозначно указать какая из них порождает строку начинающуюся с $a$.
+  \item Управляющие конструкции языков программирования как правило позволяют это сделать:
+    \begin{align*}
+      stmt &\rightarrow \textbf{if} \: expr \: \textbf{then} \: stmt \: \textbf{else} \: stmt\\
+           &\:\mid \;\, \textbf{while} \: expr \: \textbf{do} \: stmt\\
+           &\:\mid \;\, \textbf{begin} \: stmt\_list \: \textbf{end}
+    \end{align*}
+\end{itemize}
+\end{frame}
+
+\subsection{Диаграмма переходов}
+\begin{frame}
+\frametitle{Диаграмма переходов}
+\begin{itemize}
+  \item Можно представить план предиктивного синтаксического анализатора в виде диаграммы переходов.
+  \item Для каждого нетерминала - отдельная диаграмма переходов.
+  \item Дуги двух типов:
+    \begin{enumerate}
+      \item Терминалы - поглощение входного токена
+      \item Нетерминалы - вызов процедуры нетерминала
+    \end{enumerate}
+  \item Построение:
+    \begin{enumerate}
+      \item Для каждого нетерминала строим начальное и конечное состояние
+      \item Для каждой продукции нетерминала $A \rightarrow A_1 \dots A_n$ строим путь из начального состояния в конечное через дуги $A_1$ \dots $A_n$
+    \end{enumerate}
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Диаграмма переходов}
+\vspace{-0.3cm}
+\tikzstyle{every state}=[inner sep=1pt,minimum size=0.7cm]
+\begin{columns}
+\begin{column}{7cm}
+\pause
+\pause
+\begin{figure}
+\begin{tikzpicture}[>=stealth',shorten >=1pt,auto,node distance=2cm]
+  \node[state]                   (n_0)                      {0};
+  \node                          (l_0) [left=0.2cm of n_0]  {$E:$};
+  \node[state]                   (n_1) [right of=n_0]       {1};  
+  \node[accepting,state]         (n_2) [right of=n_1]       {2};
+  \draw[->] (n_0) edge node {$T$} (n_1)
+            (n_1) edge node {$E'$} (n_2);
+\end{tikzpicture}
+\end{figure}
+\vspace{-0.7cm}
+\pause
+
+\begin{figure}
+\begin{tikzpicture}[>=stealth',shorten >=1pt,auto,node distance=1.5cm]
+  \node[state]                   (n_3)                      {3};
+  \node                          (l_3) [left=0.2cm of n_0]  {$E':$};
+  \node[state]                   (n_4) [right of=n_3]       {4};  
+  \node[state]                   (n_5) [right of=n_4]       {5};  
+  \node[accepting,state]         (n_6) [right of=n_5]       {6};
+  \node                          (i_3) [below=0.5cm of n_3] {};
+  \node                          (i_6) [below=0.5cm of n_6] {};
+  \draw[->] (n_3) edge node {$+$} (n_4)
+            (n_4) edge node {$T$} (n_5)
+            (n_5) edge node {$E'$} (n_6);            
+  \draw[->,rounded corners=10pt] (n_3) -- (i_3.center) -- node[midway,above] {$\varepsilon$} (i_6.center) -- (n_6);
+\end{tikzpicture}
+\end{figure}
+\vspace{-0.7cm}
+\pause
+
+\begin{figure}
+\begin{tikzpicture}[>=stealth',shorten >=1pt,auto,node distance=2cm]
+  \node[state]                   (n_7)                      {7};
+  \node                          (l_7) [left=0.2cm of n_0]  {$T:$};
+  \node[state]                   (n_8) [right of=n_7]       {8};  
+  \node[accepting,state]         (n_9) [right of=n_8]       {9};
+  \draw[->] (n_0) edge node {$F$} (n_1)
+            (n_1) edge node {$T'$} (n_2);
+\end{tikzpicture}
+\end{figure}
+\vspace{-0.7cm}
+\pause
+
+\begin{figure}
+\begin{tikzpicture}[>=stealth',shorten >=1pt,auto,node distance=1.5cm]
+  \node[state]                   (n_10)                      {10};
+  \node                          (l_10) [left=0.2cm of n_0]  {$T':$};
+  \node[state]                   (n_11) [right of=n_10]       {11};  
+  \node[state]                   (n_12) [right of=n_11]       {12};  
+  \node[accepting,state]         (n_13) [right of=n_12]       {13};
+  \node                          (i_10) [below=0.5cm of n_10] {};
+  \node                          (i_13) [below=0.5cm of n_13] {};
+  \draw[->] (n_10) edge node {$*$} (n_11)
+            (n_11) edge node {$F$} (n_12)
+            (n_12) edge node {$T'$} (n_13);            
+  \draw[->,rounded corners=10pt] (n_10) -- (i_10.center) -- node[midway,above] {$\varepsilon$} (i_13.center) -- (n_13);
+\end{tikzpicture}
+\end{figure}
+\vspace{-0.7cm}
+\pause
+
+\begin{figure}
+\begin{tikzpicture}[>=stealth',shorten >=1pt,auto,node distance=1.5cm]
+  \node[state]                   (n_14)                      {14};
+  \node                          (l_14) [left=0.2cm of n_0]  {$F:$};
+  \node[state]                   (n_15) [right of=n_14]       {15};  
+  \node[state]                   (n_16) [right of=n_15]       {16};  
+  \node[accepting,state]         (n_17) [right of=n_16]       {17};
+  \node                          (i_14) [below=0.5cm of n_14] {};
+  \node                          (i_17) [below=0.5cm of n_17] {};
+  \draw[->] (n_14) edge node {$($} (n_15)
+            (n_15) edge node {$E$} (n_16)
+            (n_16) edge node {$)$} (n_17);            
+  \draw[->,rounded corners=10pt] (n_14) -- (i_14.center) -- node[midway,above] {$\varepsilon$} (i_17.center) -- (n_17);
+\end{tikzpicture}
+\end{figure}
+\end{column}
+
+\begin{column}{4cm}
+\begin{onlyenv}<1>
+  \begin{align*}
+    &E \rightarrow E+T \: \mid \: T\\
+    &T \rightarrow T*F \: \mid \: F\\
+    &F \rightarrow (E) \: \mid \: \textbf{id}
+  \end{align*}
+\end{onlyenv}
+
+\begin{onlyenv}<2->
+  \begin{align*}
+    &E \rightarrow TE'\\
+    &E' \rightarrow +TE' \: \mid \: \varepsilon\\
+    &T \rightarrow FT'\\
+    &T' \rightarrow *FT' \: \mid \: \varepsilon\\    
+    &F \rightarrow (E) \: \mid \: \textbf{id}
+  \end{align*}
+\end{onlyenv}
+\end{column}
+\end{columns}
+
+\end{frame}
+
+\subsection{Нерекурсивный предиктивный анализатор}
+\begin{frame}
+\frametitle{Нерекурсивный предиктивный анализ}
+\begin{itemize}
+  \item Неявное использование стека (в рекурсивном случае) можно заменить на явное.
+  \item Предсказание следующей продукции по текущему нетерминалу и входному символу реализуем в виде поиска в таблице разбора
+\end{itemize}
+
+\begin{figure}
+\tikzstyle{sym}=[node distance=-0.15mm,minimum size=0.6cm]
+\begin{tikzpicture}[start chain=1 going right, start chain=2 going below]
+  \node[sym,draw,on chain=1] at (1.5cm,1.5cm) {};
+  \node[sym,draw,on chain=1] {a};
+  \node[sym,draw,on chain=1] (s) {+};
+  \node[sym,draw,on chain=1] {b};
+  \node[sym,draw,on chain=1] {\$};
+  \node[sym,draw,on chain=2] at (0cm,0cm) {X};
+  \node[sym,draw,on chain=2] (t) {Y};
+  \node[sym,draw,on chain=2] {Z};
+  \node[sym,draw,on chain=2] {\$};
+  \node[draw, text width=3cm, text badly centered] at (s |- t) (syn) {Предиктивный синтаксический анализатор};
+  \node[draw, below=0.7cm of syn, text width=2cm, text badly centered] (table) {Таблица разбора};
+  \node[right=0.7cm of syn] (exit) {Выход};
+  \node[left of=t] {Стек};
+  \node[left =1.2cm of s] {Вход};
+  \draw[<-] (t.east) -- (syn.west);
+  \draw[<-] (s.south) -- (syn.north);
+  \draw[<-] (table.north) -- (syn.south);
+  \draw[->] (syn.east) -- (exit.west);
+  
+\end{tikzpicture}
+\end{figure}
+
+\end{frame}
+
+\begin{frame}
+\frametitle{Алгоритм}
+\begin{algorithmic}
+\small
+\State Установить указатель на ip на первый символ w\$
+\Repeat 
+  \State Обозначим X - символ на вершине стека
+  \State а - символ, на который указывает ip
+  \If {$X \in \{T, \$\}$}
+    \If {$X = a$}
+      \State Снять со стека X и переместить ip
+    \Else
+      \State Ошибка
+    \EndIf
+  \Else
+    \If {$M[X,a] = X \rightarrow Y_1\dots Y_k$ }
+      \State Снять X со стека
+      \State Поместить в стек $Y_k\dots Y_1$
+    \Else
+      \State Ошибка
+    \EndIf
+  \EndIf  
+
+\Until {$X = \$$}
+
+\end{algorithmic}
+\end{frame}
+
+\subsection{Таблица переходов}
+\begin{frame}
+\frametitle{Пример таблицы}
+\begin{center}
+	\begin{scriptsize}
+		\begin{tabular}{c | c | c | c | c | c | c}
+			\hline
+			\multirow{2}{*}{Нетерминал} & \multicolumn{6}{|c}{Входной символ} \\
+			\cline{2-7}
+			& \textbf{id} & + & * & ( & ) & \$\\
+			\hline
+			$E$ & $E \rightarrow TE'$ & & & $E \rightarrow TE'$ & & \\
+			$E'$ & & $E' \rightarrow +TE'$ & & & $E' \rightarrow \varepsilon$ & $E' \rightarrow \varepsilon$\\
+			$T$ & $T \rightarrow FT'$ & & & $T \rightarrow FT'$ & & \\
+			$T'$ & & $T' \rightarrow \varepsilon$ & $T' \rightarrow *FT'$ & & $T' \rightarrow \varepsilon$ & $T' \rightarrow \varepsilon$\\
+			$F$ & $F \rightarrow \textbf{id}$ & & & $F \rightarrow (E)$ & & \\
+			\hline
+		\end{tabular}
+	\end{scriptsize}
+\end{center}
+\end{frame}
+
+\begin{frame}
+\frametitle{Множества FIRST и FOLLOW}
+\begin{description}
+  \item[FIRST] Если $\alpha$ - произвольная строка \textit{символов} грамматики, то определим $FIRST(\alpha)$ как множество терминалов, с которых начинаются строки, выводимые из $\alpha$ 
+    \begin{itemize}
+      \item Если $\alpha \xrightarrow{*} \varepsilon$, то  $\varepsilon \in FIRST(\alpha)$
+    \end{itemize}
+  \item[FOLLOW] Определим множество $FOLLOW(A)$ для нетерминала $A$, как множество терминалов $a$, которые могут располагаться непосредственно справа от $A$ в некоторой сентенциальной форме\footnote{Сентенциальная форма — последовательность символов (терминалов и нетерминалов), выводимых из начального символа}.
+    \begin{itemize}
+      \item $FOLLOW(A) = \{a \in T \mid \exists \alpha,\beta : \exists S \xrightarrow{*} \alpha A a \beta\}$
+      \item Если $A$ может оказаться крайним справа символом некоторой сентенциальной формы, то $\$ \in FOLLOW(A)$
+    \end{itemize}
+\end{description}
+\end{frame}
+
+\begin{frame}
+\frametitle{Построение FIRST}
+\begin{itemize}
+  \item Если $X$ - терминал, то $FIRST(X)={X}$.
+  \item Если имеется продукция $X \rightarrow \varepsilon$, добавим $\varepsilon$ к $FIRST(X)$.
+  \item Если $X$ - нетерминал и имеется продукция $X \rightarrow Y_1\dots Y_k$, то поместим $a$ в $FIRST(X)$, если для некоторого $i$ $a \in FIRST(Y_i)$ и $\varepsilon \in \{FIRST(Y_1) \cup \dots \cup FIRST(Y_{i-1})\}$, т.е. $Y_1\dots Y_{i-1} \xrightarrow{*} \varepsilon$. 
+  \item Если $\varepsilon \in \{Y_1\cap\dots\cap Y_k\} $, то добавляем $\varepsilon$ в $FIRST(X)$.
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Построение FOLLOW}
+\begin{itemize}
+  \item Поместим $\$$ в $FOLLOW(S)$, где $S$ - стартовый символ, а $\$$ - маркер конца строки.
+  \item Если имеется продукция $A \rightarrow \alpha B \beta$, то все элементы $FIRST(\beta)$, кроме $\varepsilon$, помещаются в множество $FOLLOW(B)$.
+  \item Если имеется продукция $A \rightarrow \alpha  B$ или $A \rightarrow \alpha B \beta$, где $FIRST(\beta)$ содержит $\varepsilon$(т.е. $\beta \xrightarrow{*}\varepsilon$), то все элементы из множества $FOLLOW(A)$, помещаются в множество $FOLLOW(B)$.
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Построение таблицы переходов}
+\begin{itemize}
+  \item Строим FIRST и FOLLOW
+  \item Для каждой продукции грамматики $A \rightarrow \alpha$:
+    \begin{itemize}
+      \item Для каждого терминала $a$ из $FIRST(\alpha)$ добавляем $A \rightarrow \alpha$ в ячейку $M[A,a]$.
+      \item Если $\varepsilon \in FIRST(\alpha)$, то для каждого терминала $b$ из $FOLLOW(A)$ добавим $A \rightarrow \alpha$ в ячейку $M[A,b]$.
+      \item Если $\varepsilon \in FIRST(\alpha)$, а $\$ \in FOLLOW(A)$, добавим $A \rightarrow \alpha$ в ячейку $M[A,\;]$. 
+    \end{itemize}
+  \item Пустые ячейки делаем указывающими на ошибку.
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{LL(1) грамматики}
+\begin{itemize}
+  \item Построенная таблица может иметь несколько записей в одной ячейке.
+    \begin{itemize}
+      \item Левая рекурсия
+      \item Неоднозначность
+    \end{itemize}
+  \item Грамматика, таблица которой не имеет множественных записей называется LL(1)
+    \begin{itemize}
+      \item L - слева-направо
+      \item L - левое порождение
+      \item 1 - один символ для предсказания
+    \end{itemize}
+\end{itemize}
+\end{frame}
+
+\end{document}
+
+

@@ -1,0 +1,330 @@
+\documentclass[16pt,pdf,unicode]{beamer}
+
+\usepackage[utf8]{inputenc}
+\usepackage[english,russian]{babel}
+\usepackage{listings}
+\usepackage{tikz}
+\usepackage{color}
+\usepackage{geometry}
+\usepackage{amsmath}
+\usepackage{multicol}
+
+\usetikzlibrary{positioning}
+\usetikzlibrary{automata}
+\usetikzlibrary{chains}
+\usetikzlibrary{shapes,arrows}
+\usetikzlibrary{calc} % for manimulation of coordinates
+
+\usetheme{Boadilla}
+\setbeamercovered{transparent}
+
+\lstset{ language=Lisp,
+         showspaces=false,
+         morekeywords={define, begin, car, cdr}}
+
+\title[Семантический анализ]{Теория и практика компилляции программ: семантический анализ}
+\author[А.Ю. Заостровных]{Арсений Юрьевич Заостровных}
+\institute[МФТИ]{Московский физико-технический институт\\
+	{\tiny государственный университет}\\}
+\date[2013]{МФТИ, 9 февраля 2013 года}
+
+\begin{document}
+
+%\iffalse
+
+\begin{frame}[plain]
+\maketitle
+\end{frame}
+
+\begin{frame}
+  \frametitle{Положение семантического анализа}
+\begin{tikzpicture}[node distance=0.4cm]
+\tikzset{
+ mynd/.style={rectangle,rounded corners,draw=black, top color=white,
+   bottom color=blue!30,very thick, inner sep=0.2cm,
+   minimum size=1cm, text centered},
+ myarr/.style={->, >=latex', shorten >=1pt, very thick}
+}
+\node[mynd] (lexer) {ЛЕКСЕР};
+\node[mynd,right=of lexer] (parser) {ПАРСЕР};
+\node[mynd,right=of parser,bottom color=blue!50,inner sep=0.1cm,text width=3.5cm] (seman) {СЕМАНТИЧЕСКИЙ  АНАЛИЗАТОР};
+\node[right=of seman,text width=1.3cm,text centered,inner sep=0cm] (fin) {Генерация кода};
+\node[left=of lexer,text width=1.3cm,text centered,inner sep=0cm] (sta) {Исходный текст};
+
+\draw[myarr] (sta.center) -- (lexer.west);
+\draw[myarr] (lexer) -- (parser);
+\draw[myarr] (parser) -- (seman);
+\draw[myarr] (seman.east) -- (fin.center);
+\end{tikzpicture}
+\end{frame}
+
+\begin{frame}
+  \frametitle{Задачи семантического анализа}
+  \begin{itemize}
+  \item Уяснение значения контекстно зависимых конструкций
+    \begin{itemize}
+    \item Вывод типов сложных выражений
+    \item Разрешение вызовов перегруженных функций
+    \item Выполнение необходимых преобразований типов
+    \item Построение графа наследования
+    \item Построение областей видимости идентификаторов
+    \end{itemize}
+  \item Нахождение ''смысловых`` ошибок, таких, как:
+    \begin{itemize}
+    \item Неответствие типов
+    \item Неоднозначное определение классов
+    \item Нарушение прав доступа
+    \item Изменение констант
+    \item Инстанцирование абстрактных классов
+    \item Вызов функции с неправильными аргументами
+    \end{itemize}
+  \item Набор задач полностью определяется языком
+  \end{itemize}
+\end{frame}
+
+\begin{frame}
+  \frametitle{Общий алгоритм}
+\begin{itemize}
+  \item Обход AST в глубину
+  \item Вывод свойств кода локально на каждом узле дерева на основании:
+    \begin{itemize}
+      \item информации переданной от предка
+      \item результатов анализа потомков
+    \end{itemize}
+  \item По типу узла применяется соответствующее правило вывода
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+  \frametitle{Область видимости}
+  \begin{itemize}
+    \item {\bf Привязка символа (binding)} --- ассоциация символа (имени) с конкретным объектом программы (кодом или данными)
+    \item {\bf Область видимости (scope)} --- часть кода в которой символ определён и имеет одну и ту же привязку (binding)
+    \begin{itemize}
+      \item Глобальная
+      \item Модульная
+      \item Коллективная (shared)
+      \item Локальная
+      \begin{itemize}
+        \item {\bf Лексическая} --- имя ассоциируется с текстуально ближайшим определением 
+        \item {\bf Динамическая} --- имя ассоциируется с последним определению (вверх по стеку вызовов)
+      \end{itemize}
+    \end{itemize}
+  \end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+  \frametitle{Лексическая и динамическая области видимости}
+\begin{lstlisting}
+  (define a 1)
+  (define (foo)
+    (write a) (set! a 2))
+  (define (bar)
+    (let ((a 3)) (foo)))
+    
+  (bar)
+  (write a)
+\end{lstlisting}
+Вывод программы зависит от обласити видимости принятой в языке:
+\begin{itemize}
+  \item Лексическая: 1 2
+  \item Динамическая: 3 1
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+  \frametitle{Поддержка областей видимости}
+\begin{block}{}
+  {\bfЛексическая} область видимости требует анализа на стадии компиляции. Для разрешения неоднозначностей применяются ``таблицы символов''.
+\end{block}
+\begin{exampleblock}{}
+  {\bfДинамическая} - требует только поддержки во время исполнения. Используется поиск вверх по стеку вызовов. Для этого нужны специальным образом организованные активации функций, либо дополнительные структуры данных.
+\end{exampleblock}
+\end{frame}
+
+\begin{frame}[fragile]
+  \frametitle{Таблица символов}
+\begin{columns}
+\column{0.5\linewidth}
+\begin{lstlisting}
+  (lambda (a b c)
+    (+ a
+       (let (a)
+         (let (d e)
+           (let (c)
+             (+ a b c))))))
+\end{lstlisting}
+\column{0.5\linewidth}
+\begin{tikzpicture}[node distance=0.1cm]
+  \tikzset{
+    nd/.style={rectangle,draw,text width=4cm,text centered}
+  }
+  \node[nd] (frst) {$a\rightarrow1\ \ b\rightarrow2\ \ c\rightarrow3$};
+  \node[nd,below=of frst] (scnd) {$a\rightarrow4$};
+  \node[nd,below=of scnd] (thrd) {$d\rightarrow5\ \ e\rightarrow6$};
+  \node[nd,below=of thrd] (frth) {$c\rightarrow7$};
+\end{tikzpicture}
+\end{columns}
+\end{frame}
+
+\begin{frame}
+  \frametitle{Типы}
+\begin{exampleblock}{Тип это}
+  \begin{itemize}
+    \item Множество значений
+    \item Множество операций, определённых на этих значениях
+  \end{itemize}
+\end{exampleblock}
+\begin{block}{}
+  Типы существуют только в языке высокого уровня.
+\end{block}
+\begin{block}{Задачи}
+  \begin{itemize}
+    \item разрешение неоднозначных выражений
+    \item проверка корректности программы
+    \item дополнительная информация для оптимизатора
+  \end{itemize}
+\end{block}
+\end{frame}
+
+\begin{frame}
+  \frametitle{Варианты типизации}
+\begin{description}
+\item[Статическая]: все проверки и выводы производятся один раз, на этапе компиляции (C, Java, Haskell)
+  \begin{itemize}
+    \item быстрее исполнение
+    \item более защищенно
+  \end{itemize}
+\item[Динамическая]: проверка и разрешение неоднозначностей происходят во время исполнения (Perl, Scheme, Shell)
+  \begin{itemize}
+    \item быстрее прототипирование
+    \item более гибко
+  \end{itemize}
+\end{description}
+\end{frame}
+
+\begin{frame}
+  \frametitle{Правила вывода}
+\begin{itemize}
+  \item Общая форма: ``Если верна гипотеза, то верно и заключение''
+  \item Строчная нотация: $H_1\land H_2\land ...\land H_n \Rightarrow C$, здесь:
+    \begin{itemize}
+      \item $a\land b$ -- конъюнкция
+      \item $a\Rightarrow b$ -- импликация (если a, то b)
+      \item $H_i$ и $C$ -- гипотезы и заключение. Могут иметь форму $e_i:T_i$
+      \item $e:T$ -- выражение е принадлежит типу Т.
+    \end{itemize}
+  \item Столбцовая нотация:\[\frac{\vdash H_1 ... \vdash H_n}{\vdash C}\], где:
+    \begin{itemize}
+      \item $\vdash$ означает доказуемо
+      \item конъюнкции подразумеваются
+    \end{itemize}
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+  \frametitle{Примеры}
+\begin{block}{Исходные правила}
+  \[\frac{\text{а - целое число}}{\vdash a:\mathbb{Z}}\]
+  \[\frac{\vdash e_1:\mathbb{Z} \vdash e_2:\mathbb{Z}}{\vdash e_1*e_2:\mathbb{Z}}\]
+\end{block}
+\begin{block}{Вывод}
+  Выражение $1 * 2 * 3$
+  \huge{
+  \[\frac{\frac{\text{1 - целое}}{\vdash 1:\mathbb{Z}}\ \frac{\frac{\text{2-целое}}{\vdash 2:\mathbb{Z}}\ \frac{\text{3 - целое}}{\vdash 3:\mathbb{Z}}}{\vdash 2 * 3 :\mathbb{Z}}}{\vdash 1 * 2 * 3 :\mathbb{Z}}\]}
+\end{block}
+\end{frame}
+
+\begin{frame}
+  \frametitle{Окружение типов}
+\begin{itemize}
+  \item {\bfСвободная переменная} -- переменная, не определяемая в рассматриваемом выражении:\\
+    (let ((a b)) (+ a b)) -- здесь b - свободна везде, а а - свободна только во внутреннем выражении.
+  \item {\bfОкружение типов} О -- функция ассоциирующая свободные переменные с типами. (Таблица символов)
+  \item $O \vdash e:T $ означает: В предположении, что типы свободных переменных даны через О, е доказуемо имеет тип Т.
+  \item $O[T/x]$ означает окружение О, дополненное ассоциацией переменной x с типом Т:
+    \begin{itemize}
+      \item $O[T/x](x) = T$
+      \item $y\neq x \Rightarrow O[T/x](y)=O(y)$
+    \end{itemize}
+  \item Новое правило:
+\[\frac{O(x)=T}{O\vdash x:T}\]
+\end{itemize}
+\end{frame}
+
+%\fi
+
+\begin{frame}
+  \frametitle{Примеры}
+  \[\frac{O\vdash e_1:\mathbb{Z}\ \ O\vdash e_2:\mathbb{Z}}{O\vdash e_1*e_2:\mathbb{Z}}\]
+  \\
+  \\
+  \[\frac{\begin{aligned} &O\vdash e_1:T_1 \\ &O[T_1/x]\vdash e_2:T_2
+    \end{aligned}}{O\vdash (let\ ((x\ e_1))\ e_2):T_2}\]
+\end{frame}
+
+\begin{frame}
+  \frametitle{Уточнение типов($\leq$)}
+\begin{itemize}
+  \item $X\leq X$
+  \item $X\leq Y$ если X наследует (или уточняет) Y
+  \item $X\leq Y \land Y\leq Z \Rightarrow X\leq Z$
+  \item Точная верхняя грань ТВГ(X,Y) -- наиболее точный тип Z: $X \leq Z \land Y \leq Z$. Как правило это младший общий предок в древе типов (древе наследования).
+  \item примеры:
+\end{itemize}
+\begin{multicols}{2}
+  \[\frac{\begin{aligned} &O\vdash e_0:Bool\\
+      &O\vdash e_1:T_1\\
+      &O\vdash e_2:T_2
+  \end{aligned}}{O\vdash e_0 ? e_1 : e_2 :\text{ТВГ}(T_1,T_2)}\]
+  \[\frac{\begin{aligned} &O\vdash e:T_1 \\ &O(x)=T_2 \\ &T_1 \leq T_2
+  \end{aligned}}{O\vdash x=e:T_2}\]
+\end{multicols}
+\end{frame}
+
+\begin{frame}
+  \frametitle{Диспетчеризация методов}
+\begin{itemize}
+  \item Специальный тип для функции или метода: $(T_1,...,T_n\rightarrow T_0)$
+  \item Подчас используется отдельное пространство имен
+  \item Обозначение: $M(C,f)=(T_1,...,T_n\rightarrow T_0)$ означает, что в классе C есть метод f c сигнатурой: $f(x_1:T_1,...,x_n:T_n): T_0$. М -- окружение методов.
+\end{itemize}
+\[\frac{\begin{aligned}
+    O,M&\vdash e_x:T_x\\
+    O,M&\vdash e_1:T_1\\
+    &\hdots\\
+    O,M&\vdash e_n:T_n\\
+    M(T_x,f)=(&T_1^{'},\hdots,T_n^{'}\rightarrow T_0)\\
+    T_i\leq &T_i^{'}, 1\leq \leq n
+  \end{aligned}}{O,M\vdash e_x.f(e_1,...,e_n):T_0}\]
+\end{frame}
+
+\begin{frame}[fragile]
+  \frametitle{Пример реализации}
+\begin{exampleblock}{}
+\[\frac{\begin{aligned} &O,M\vdash e_1:T_1 \\ &O[T_1/x],M\vdash e_2:T_2
+\end{aligned}}{O,M\vdash (let\ ((x\ e_1))\ e_2):T_2}\]
+\end{exampleblock}
+\begin{lstlisting}
+(define (type-check O M let-expr)
+  (let ((T (type-check O M
+                       (initializer-part let-expr)))
+        (x (var-part let-expr)))
+    (type-check (cons `(,x ,T) O) M
+                (body-part let-expr))))
+\end{lstlisting}
+\end{frame}
+
+\begin{frame}
+  \frametitle{Итоги}
+\begin{itemize}
+  \item Статическое соответствие типов проверяется на этапе компиляции
+  \item Проверка делается обходом в глубину и применением локальных правил
+  \item Правила вывода недостающих типов -- компактные утверждения позиционной логики
+  \item Типы таких конструкций как переменные и вызовы моделируются с помощью окружения
+\end{itemize}
+\end{frame}
+
+\end{document}
+
+

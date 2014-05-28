@@ -1,0 +1,470 @@
+\documentclass[16pt,pdf,unicode]{beamer}
+
+\usepackage[utf8]{inputenc}
+\usepackage[english,russian]{babel}
+\usepackage{listings}
+\usepackage{algpseudocode}
+\usepackage{tikz}
+\usepackage{color}
+\usepackage{geometry}
+\usepackage{multirow}
+
+\usetikzlibrary{positioning}
+\usetikzlibrary{automata}
+\usetikzlibrary{chains}
+\usetikzlibrary{scopes}
+\usetikzlibrary{arrows}
+\usetikzlibrary{matrix}
+\usetikzlibrary{fit}
+\usetikzlibrary{backgrounds}
+\usetikzlibrary{shapes.geometric}
+\usetikzlibrary{shapes.multipart}
+\usetikzlibrary{intersections}
+\usetikzlibrary{calc} % for manimulation of coordinates
+\tikzset{
+    invisible/.style={opacity=0},
+    visible on/.style={alt=#1{}{invisible}},
+    alt/.code args={<#1>#2#3}{%
+      \alt<#1>{\pgfkeysalso{#2}}{\pgfkeysalso{#3}} % \pgfkeysalso doesn't change the path
+    },
+  }
+
+%
+% Looooooong macro to draw nested math sets
+%
+\newcommand\drawnestedsets[4]{
+  % initial position
+  \def\position{#1}
+  % number of sets
+  \def\nbsets{#2}
+  % list of sets
+  \def\listofnestedsets{#3}
+  % reversed list of colors
+  \def\reversedlistofcolors{#4}
+
+  % position and draw labels of sets
+  \coordinate (circle-0) at (#1);
+  \coordinate (set-0) at (#1);
+  \foreach \set [count=\c] in \listofnestedsets {
+    \pgfmathtruncatemacro{\cminusone}{\c - 1}
+    % label of current set (below previous nested set)
+    \node[below=3pt of circle-\cminusone,inner sep=0]
+    (set-\c) {$\set$};
+    % current set (fit current label and previous set)
+    \node[circle,inner sep=0,fit=(circle-\cminusone)(set-\c)]
+    (circle-\c) {};
+  }
+
+  % draw and fill sets in reverse order
+  \begin{scope}[on background layer]
+    \foreach \col[count=\c] in \reversedlistofcolors {
+      \pgfmathtruncatemacro{\invc}{\nbsets-\c}
+      \pgfmathtruncatemacro{\invcplusone}{\invc+1}
+      \node[circle,draw,fill=\col,inner sep=0,
+      fit=(circle-\invc)(set-\invcplusone)] {};
+    }
+  \end{scope}
+}
+
+
+\usetheme{Boadilla}
+\setbeamercovered{transparent}
+%\lstset{ language=Lisp }
+
+\title[Синтаксический анализ]{Теория и практика компилляции программ: синтаксический анализ, часть III}
+\author[Д. Анисимов]{Денис Анисимов}
+\institute[МФТИ]{Московский физико-технический университет\\
+	{\tiny государственный университет}\\}
+\date[08.12.2012]{МФТИ, 08 декабря 2012 года}
+
+\begin{document}
+
+\begin{frame}[plain]
+\setcounter{framenumber}{0}
+\titlepage
+\end{frame}
+
+\section{Восходящий анализ}
+\begin{frame}
+\frametitle{Восходящий анализ}
+\begin{itemize}
+  \item Основной метод восходящего анализа - "перенос/свёртка"(shift-reduce)
+  \item Идея:
+    \begin{itemize}
+      \item Будем строить дерево разбора начиная с листьев
+      \item Каждый шаг \textit{свёртки} - замена некоторой подстроки, соответствующей правой части продукции, левой частью продукции. 
+      \item В конце получим обращённое порождение входной строки.
+    \end{itemize}
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Пример}
+Грамматика:
+\begin{align*}
+  &S \rightarrow \alert<5>{aABe}\\
+  &A \rightarrow \alert<3>{Abc} \mid \alert<2>{b}\\
+  &B \rightarrow \alert<4>{d}
+\end{align*}
+Процесс свёртки:
+\begin{align*}
+\onslide
+a{\alert<2>{b}}bcde\\
+\pause
+a\alert<3>{\alert<2>{A}bc}de\\
+\pause
+a\alert<3>{A}\alert<4>{d}e\\
+\pause
+\alert<5>{aA\alert<4>{B}e}\\
+\pause
+\alert<5>{S}\\
+\end{align*}
+Соответствующее порождение:
+$$\onslide<5->S \rightarrow\onslide<4-> aABe \rightarrow\onslide<3-> aAde \rightarrow \onslide<2->aAbcde \rightarrow \onslide<1->abbcde $$
+\end{frame}
+
+\begin{frame}
+\frametitle{Основы}
+\begin{itemize}
+  \item Основа - подстрока, совпадающая с правой частью продукции, свёртка которой в левую часть является одним шагом обращённого порождения.
+  \item Для правосентенциальной формы $\gamma$, основа это:
+  \begin{itemize}
+    \item Продукция $A \rightarrow \beta$
+    \item Позиция строки $\beta$ в $\gamma$
+    \item При замене $\beta$ на $A$ получаем предыдущую правосентенциальную форму правого порождения $\gamma$
+  \end{itemize}
+  \item Пример:
+    \begin{itemize}
+      \item $S \xrightarrow[rm]{*} \alpha A \omega \xrightarrow[rm]{} \alpha \beta \omega$
+      \item $A \rightarrow \beta$  в позиции $\alpha$ является основой строки $\alpha \beta \omega$
+      \item $\omega$ содержит только терминалы
+    \end{itemize}
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Обрезка основ}
+\begin{itemize}
+  \item Получение  обращённого правого порождения - обрезка основ.
+  \item Если $\omega$ - предложение рассматриваемой грамматики, то $\omega = \gamma_n$, где $S = \gamma_0 \xrightarrow[rm]{} \gamma_1 \xrightarrow[rm]{} \dots \xrightarrow[rm]{} \gamma_n$
+  \item Для получение $\gamma_{n-1}$ находим основу $\beta_n$ в $\gamma_n$ и заменяем её левой частью продукции $A_n \rightarrow \beta_n$ 
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Пример}
+\begin{columns}
+	\begin{column}{4cm}
+		Грамматика:
+		\begin{align*}
+		&E \rightarrow E + E\\
+		&E \rightarrow E * E\\
+		&E \rightarrow (E)\\
+		&E \rightarrow \textbf{id}
+		\end{align*}
+	\end{column}
+	\begin{column}{6cm}
+    \begin{tikzpicture}
+		  \node {$E$}
+		    [level distance=10mm]
+		    child [visible on=<1-5>] {
+		      node {$E$}
+		        child [visible on=<1>] {node {$\textbf{id}_1$}}
+		    }
+		    child [visible on=<1-5>] {node {+}}
+		    child [visible on=<1-5>] {
+		      node {$E$}
+		        child [visible on=<1-4>] {
+		          node {$E$}
+		            child [visible on=<1-2>] {node {$\textbf{id}_2$}}
+		        }
+		        child [visible on=<1-4>] {node {*}}
+		        child [visible on=<1-4>] {
+		          node {$E$}
+		            child [visible on=<1-3>] {node {$\textbf{id}_2$}}
+		        }
+		    }
+		  ;
+		\end{tikzpicture}	
+	\end{column}
+\end{columns}
+Входная строка:
+$$\textbf{id}_1 + \textbf{id}_2 * \textbf{id}_3$$
+
+\begin{tabular}{r|c|l}
+\hline
+Правосентенциальная форма & Основа & Сворачивающая продукция\\
+\hline
+\uncover<1->{$\textbf{id}_1 + \textbf{id}_2 * \textbf{id}_3$} & 
+\uncover<1->{$\textbf{id}_1$} & 
+\uncover<1->{$E \rightarrow \textbf{id}$} \\
+
+\uncover<2->{$E + \textbf{id}_2 * \textbf{id}_3$} &
+\uncover<2->{$\textbf{id}_2$} &
+\uncover<2->{$E \rightarrow \textbf{id}$} \\
+
+\uncover<3->{$E + E * \textbf{id}_3$}  &
+\uncover<3->{$\textbf{id}_3$} & 
+\uncover<3->{$E \rightarrow \textbf{id}$}\\
+
+\uncover<4->{$E + E * E$} & 
+\uncover<4->{$E * E$} & 
+\uncover<4->{$E \rightarrow E * E$}\\
+
+\uncover<5->{$E + E$} & 
+\uncover<5->{$E + E$} & 
+\uncover<5->{$E \rightarrow E + E$}\\
+
+\uncover<6->{$E$} & & \\
+\hline
+
+\end{tabular}
+\end{frame}
+
+\begin{frame}
+\frametitle{Стековая реализация ПС анализа}
+\begin{itemize}
+  \item Символы грамматики - стек, анализируемая строка - сходной буффер.
+  \item Основные операции:
+    \begin{description}
+      \item[Перенос] - символ из входного буфера переносится на вершину стека.
+      \item[Свёртка] - замена символов на вершине стека левой частью продукции.
+      \item[Допуск/Ошибка]
+    \end{description}
+  \item Основное свойство такой реализации - основа всегда находится на вершине стека.
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Активные префиксы}
+\begin{itemize}
+  \item Префиксы правосентенциальных форм, являющиеся корректными состояниями стека в процессе работы ПС анализатора.
+  \item Активные префиксы не выходят за правую границу крайней справа основы.
+  \item Просканированная часть исходной строки не содержит ошибок только в том случае, если она может быть свёрнута в активный префикс.
+\end{itemize}
+\end{frame}
+
+\section{LR-анализаторы}
+
+\begin{frame}
+\frametitle{LR-анализаторы}
+\begin{description}
+  \item[LR(k)-анализ] L - сканирование входной строки слева направо \\
+                      R - построение обращённый правых порождений \\
+                      k - число символов для принятия решения
+\end{description}
+\begin{itemize}
+  \item Для большинства конструкций языков программирования возможно построить LR-грамматику
+  \item Наиболее общий метод ПС-анализа без отката
+  \item Достаточно трудоёмкий для ручного построения
+  \item Существуют генераторы LR анализаторов
+\end{itemize}
+\end{frame}
+
+\subsection{Алгоритм LR-анализа}
+\begin{frame}
+\frametitle{Схема LR-анализатора}
+\begin{figure}
+\tikzstyle{sym}=[node distance=-0.15mm,minimum size=0.6cm]
+\tikzstyle{st}=[node distance=-0.15mm,minimum size=0.8cm]
+\begin{tikzpicture}[start chain=1 going right, start chain=2 going below]
+  \node[sym,draw,on chain=1] at (1.5cm,1.5cm) {$a_1$};
+  \node[sym,draw,on chain=1] {$..$};
+  \node[sym,draw,on chain=1] (s) {$a_i$};
+  \node[sym,draw,on chain=1] {$..$};
+  \node[sym,draw,on chain=1] {$a_n$};
+  \node[sym,draw,on chain=1] {$\$$};
+  \node[st,draw,on chain=2] at (0cm,0cm) (t) {$s_m$};
+  \node[st,draw,on chain=2] {$X_m$};
+  \node[st,draw,on chain=2] {$..$};
+  \node[st,draw,on chain=2] {$\$$};
+  \node[draw, text width=3cm, text badly centered] at (s |- t) (syn) {LR-анализатор};
+  
+  \node[rectangle split, rectangle split horizontal, 
+        rectangle split parts=2, rectangle split part align={center},
+        draw, anchor=north, minimum height=0.7cm,
+        below=0.7cm of syn] (table)
+  {
+    \nodepart{one}
+    action
+    \nodepart{two} 
+    goto
+  };
+  
+  \node[right=0.7cm of syn] (exit) {Выход};
+  \node[left of=t] {Стек};
+  \node[left =1.2cm of s] {Вход};
+  \draw[<-] (t.east) -- (syn.west);
+  \draw[<-] (s.south) -- (syn.north);
+  \draw[->] (syn.south) to [out=270,in=90] (table.two north);
+  \draw[->] (syn.south) to [out=270,in=90] (table.one north);
+  \draw[->] (syn.east) -- (exit.west);
+  
+\end{tikzpicture}
+\end{figure}
+\end{frame}
+
+\begin{frame}
+\frametitle{Общий алгоритм LR-анализа}
+\textit{Конфигруция} LR-анализатора - совокупность стека и входного буфера:
+    $$ s_0 X_1 s_1 X_2 \dots X_m s_m, \quad a_i a_{i+1} \dots a_n $$
+Действия LR-анализатора
+\begin{itemize}  
+  \item $action[s_m,a_i] = "shift\:s"$
+    $$ s_0 X_1 s_1 X_2 \dots X_m s_m a_i s, \quad a_{i+1} \dots a_n $$
+  \item $action[s_m,a_i] = "reduce\:A \rightarrow \beta"$
+    $$ s_0 X_1 s_1 X_2 \dots X_{m-r} s_{m-r} A s, \quad a_i a_{i+1} \dots a_n $$
+    где
+    \begin{itemize}
+      \item $s = goto[s_{m-r},A]$
+      \item $r$ - длина $\beta$
+    \end{itemize}
+  \item $action[s_m,a_i] = accept/reject$
+\end{itemize}
+\end{frame}
+
+\subsection{SLR-анализаторы}
+
+\begin{frame}
+\frametitle{Типы LR-анализаторов}
+\vspace*{-0.5cm}
+\begin{center}
+\begin{tikzpicture}
+\drawnestedsets{0,0}{5}{SLR(k),LALR(k),LR(k),Unambiguous,All CFGs}{blue!20,cyan,red!40,magenta!20,red!80}
+\end{tikzpicture}
+\end{center}
+\end{frame}
+
+\begin{frame}
+\frametitle{SLR-анализ}
+\begin{itemize}
+  \item Наиболее слабый(по числу грамматик)
+  \item Наиболее простой для реализации
+  \item Основная идея - на основе грамматики построить ДКА для распознавания активных префиксов
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{LR(0)-пункт}
+\begin{itemize}
+  \item $LR(0)$-пункт грамматики $G$ - продукция $G$ с точкой в некоторой позиции в правой части
+  \item Например, продукция $A \rightarrow XYZ$ даёт 4 пункта:
+    \begin{itemize}
+      \item $A \rightarrow \cdot XYZ$
+      \item $A \rightarrow X \cdot YZ$
+      \item $A \rightarrow XY \cdot Z$
+      \item $A \rightarrow XYZ \cdot $
+    \end{itemize}
+  \item Продукция $A \rightarrow \varepsilon$ даёт только один пункт: $A \rightarrow \cdot$
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Каноническая система LR(0)-пунктов}
+\begin{itemize}
+  \item Расширенная грамматика $G'$:
+    \begin{itemize}
+      \item Дополнительный стартовый символ $S'$
+      \item Продукция $S' \rightarrow S$
+    \end{itemize}
+  \item Функции
+    \begin{itemize}
+      \item Замыкания - $closure$
+      \item Перехода - $goto$
+    \end{itemize}
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Операция замыкания}
+Если $I$ - некоторое множество пунктов грамматики $G$, то его замыкание $closure(I)$ строится по правилам:
+\begin{itemize}
+  \item Изначально $closure(I) = I$
+  \item Если $\{A \rightarrow \alpha \cdot B \beta\} \in closure(I)$, и $\exists B\rightarrow \gamma$, то добавляем пункт $B \rightarrow \cdot \gamma$ в $closure(I)$
+\end{itemize}
+\pause
+\begin{columns}
+\begin{column}{0.5\textwidth}
+\begin{align*}
+  E' &\rightarrow E \\
+  E &\rightarrow E + T \mid T \\
+  T &\rightarrow T * F \mid F \\
+  F &\rightarrow (E) \mid \textbf{id} \\
+\end{align*}
+$$ I = \{E' \rightarrow \cdot E \} $$
+\end{column}
+\begin{column}{0.5\textwidth}
+\begin{align*}
+closure(I) = \\
+\{E' &\rightarrow \cdot E \\
+  E &\rightarrow \cdot E + T \\
+  E &\rightarrow \cdot T \\
+  T &\rightarrow \cdot T * F \\
+  T &\rightarrow \cdot F \\
+  F &\rightarrow \cdot (E) \\
+  F &\rightarrow \cdot \textbf{id}\}
+\end{align*}
+\end{column}
+\end{columns}
+\end{frame}
+
+\begin{frame}
+\frametitle{Операция перехода}
+Если $I$ - множество пунктов, а $X$ - символ грамматики $G$, то $goto(I,X)$ определяется как замыкание всех пунктов $[A \rightarrow \alpha X \cdot \beta]$, таких, что $[A \rightarrow \alpha \cdot X \beta]$
+\pause
+\begin{columns}
+\begin{column}{0.5\textwidth}
+\begin{align*}
+  E' &\rightarrow E \\
+  E &\rightarrow E + T \mid T \\
+  T &\rightarrow T * F \mid F \\
+  F &\rightarrow (E) \mid \textbf{id} \\
+\end{align*}
+\begin{align*}
+I = \{&[E' \rightarrow E \cdot], \\ &[E \rightarrow E \cdot + T] \}
+\end{align*}
+\end{column}
+\begin{column}{0.5\textwidth}
+\begin{align*}
+goto(I,+) = \\
+ \{E &\rightarrow E + \cdot T \\
+  T &\rightarrow \cdot T * F \\
+  T &\rightarrow \cdot F \\
+  F &\rightarrow \cdot (E) \\
+  F &\rightarrow \cdot \textbf{id}\}
+\end{align*}
+\end{column}
+\end{columns}
+\end{frame}
+
+\begin{frame}
+\frametitle{Построение множества пунктов}
+\begin{itemize}
+  \item Алгоритм построения:
+  \begin{itemize}
+    \item Начинаем со стартового пункта $C = closure(\{[S' \rightarrow \cdot S]\})$
+    \item Для каждого элемента множества $C$ и каждого символа $X$ добавляем $goto(I,X)$ в $C$
+  \end{itemize}
+  \item Полученное множество множеств пунктов - состояния ДКА, функции $goto$ определяют переходы между состояниями
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Построение таблицы SLR-анализа}
+\begin{itemize}
+  \item Состояние ДКА == состояние анализатора
+  \item Действия анализатора:
+    \begin{itemize}
+      \item Если $[A \rightarrow \alpha \cdot a \beta]\in I_i$ и $goto(I_i,a)=I_j$, то $action[i,a]$ - "перенос j"
+      \item Если $[A \rightarrow \alpha \cdot]\in I_i$, то $action[i,a]$ - "свёртка $A \rightarrow \alpha$" для всех $a$ из $FOLLOW(A)$
+      \item Если $[S' \rightarrow S \cdot ] \in I_I$, то $action[i,\$]$ - "допуск"
+    \end{itemize}
+  \item Таблица переходов $goto$ == таблица переходов ДКА
+  \item Начальное состояние - множество пунктов, содержащее $[S' \rightarrow \cdot S]$
+  \item Все неопределённые записи - "ошибка"
+\end{itemize}
+\end{frame}
+
+\end{document}
+
+

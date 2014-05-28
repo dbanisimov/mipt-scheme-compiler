@@ -1,0 +1,477 @@
+\documentclass[16pt,pdf,unicode]{beamer}
+
+\usepackage[utf8]{inputenc}
+\usepackage[english,russian]{babel}
+\usepackage{listings}
+\usepackage{tikz}
+\usepackage{color}
+\usepackage{geometry}
+
+\usetikzlibrary{positioning}
+\usetikzlibrary{automata}
+\usetikzlibrary{chains}
+\usetikzlibrary{shapes,arrows}
+\usetikzlibrary{calc} % for manimulation of coordinates
+\tikzset{
+    invisible/.style={opacity=0},
+    visible on/.style={alt=#1{}{invisible}},
+    alt/.code args={<#1>#2#3}{%
+      \alt<#1>{\pgfkeysalso{#2}}{\pgfkeysalso{#3}} % \pgfkeysalso doesn't change the path
+    },
+  }
+
+\usetheme{Boadilla}
+\setbeamercovered{transparent}
+%\lstset{ language=Lisp }
+
+\title[Синтаксический анализ]{Теория и практика компилляции программ: синтаксический анализ, часть I}
+\author[Д. Анисимов]{Денис Анисимов}
+\institute[МФТИ]{Московский физико-технический университет\\
+	{\tiny государственный университет}\\}
+\date[17.11.2012]{МФТИ, 17 ноября 2012 года}
+
+\begin{document}
+
+\begin{frame}[plain]
+\setcounter{framenumber}{0}
+\titlepage
+\end{frame}
+
+\section{Введение}
+\subsection{Обзор}
+\begin{frame}
+\frametitle{Положение синтаксического анализатора}
+\begin{figure}
+  \include{lexer_parser_role}
+\end{figure}
+\end{frame}
+
+\subsection{Контекстно-свободные грамматики}
+\begin{frame}
+\frametitle{Контекстно-свободные грамматики(CFGs)}
+\begin{itemize}
+  \item Языки программирования имеют явную рекурсивную структуру
+  \begin{itemize}
+    \item CFG отражают эту структуру
+  \end{itemize}
+  \item CFG определяет элементарные элементы языка и правила получения составных элементов
+  \begin{itemize}
+    \item Набор терминальных символов $N$. В случае ЯП, терминал=токен
+    \item Наборе нетерминальных(промежуточных) символов $N$
+    \item Стартовый символ $S \in N$
+    \item Набор правил(продукций) $P$:
+      \begin{align*}
+        X &\rightarrow Y_1...Y_n \\
+        X &\in N \\
+        Y_i &\in N \cup T \cup \{\varepsilon\}
+      \end{align*}
+  \end{itemize}
+  \end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Пример CFG}
+\begin{align*}
+  stmt &\rightarrow \bold{if} \: expr \: \bold{then} \: stmt \: \bold{else} \: stmt\\
+  expr &\rightarrow \bold{num} \: rel \: \bold{num}\\
+  rel &\rightarrow \bold{>}\\
+  rel &\rightarrow \bold{<}\\
+  rel &\rightarrow \bold{==}
+\end{align*}
+\end{frame}
+
+\begin{frame}
+\frametitle{Порождаемый язык}
+\begin{itemize}
+  \item Строки языка \textit{порождаются} продукциями начиная со стартового символа и пока не останется нетерминалов:
+  \begin{eqnarray*}
+    &S \rightarrow ... \rightarrow ... \rightarrow \alpha_0 \rightarrow \alpha_1 \rightarrow ... \rightarrow \alpha_n \\
+    &\alpha_0 \overset{*}{\rightarrow} \alpha_n
+  \end{eqnarray*}
+  \begin{itemize}
+    \item Левое и правое порождение(left-, rightmost derivation)
+  \end{itemize}
+  \item Множество всех строк порождаемых грамматикой $G$ составляет контекстно-свободный язык $L(G)$:
+  \begin{equation*}
+    \{a_1...a_n\mid\forall i: a_i \in T, S\overset{*}{\rightarrow}a_1...a_n\}
+  \end{equation*}
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Регулярные грамматики}
+\begin{itemize}
+  \item Регулярные грамматики являются подмножеством контекстно-свободных
+    \begin{align*}
+      S &\rightarrow a B \\
+      C &\rightarrow \varepsilon
+    \end{align*}
+  \item Почему не делать лексический анализ вместе с синтаксическим?
+    \begin{itemize}
+      \item Лексические правила проще.
+      \item Регулярные выражения понятны и легко реализуемы.
+      \item Разделение на логические модули компилятора.
+    \end{itemize}
+\end{itemize}
+\end{frame}
+
+\subsection{Деревья разбора}
+\begin{frame}
+\frametitle{Дерево разбора}
+\begin{itemize}
+  \item Графическое представление порождения
+  \item Корень дерева - стартовый символ, листья - терминальные символы.
+  \item Пример для $id + id * id$:
+    \begin{columns}
+      \begin{column}{0.5\textwidth}
+        \begin{center}
+          \only<2-3>{\alert{\only<2>{Левое}\only<3>{Правое} порождение}}
+        \end{center}
+        \begin{align*}
+        & E \rightarrow E \: A \: E \mid (E) \mid -E \mid \bold{id}\\
+        & A \rightarrow + \mid - \mid * \mid /
+        \end{align*}
+      \end{column}
+      \begin{column}{0.5\textwidth}
+        \only<1-2>{
+        \begin{figure}
+        \begin{tikzpicture}
+          \node {E}
+            child {
+              node {E}
+                child {node {\bf{id}}}
+            }
+            child {node {\bf{+}}}
+            child {
+              node {E}
+                child {
+                  node {E}
+                    child{node {\bf{id}}}
+                }
+                child {node {\bf{*}}}
+                child {
+                  node {E}
+                    child{node {\bf{id}}}
+                }
+            }
+          ;
+        \end{tikzpicture}      
+        \end{figure}
+        }
+        \only<3>{
+        \begin{figure}
+        \begin{tikzpicture}
+          \node {E}
+            child {
+              node {E}
+                child {
+                  node {E}
+                    child{node {\bf{id}}}
+                }
+                child {node {\bf{+}}}
+                child {
+                  node {E}
+                    child{node {\bf{id}}}
+                }
+            }            
+            child {node {\bf{*}}}
+            child {
+              node {E}
+                child {node {\bf{id}}}
+            }
+          ;
+        \end{tikzpicture}      
+        \end{figure}
+        }
+      \end{column}
+    \end{columns}
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Дерево абстрактного синтаксиса}
+\begin{itemize}
+  \only<1>{
+  \item Не содержит информации не нужной для последующих фаз компилятора:
+  \begin{itemize}
+    \item Скобки
+    \item Промежуточные узлы
+    \item Управляющие символы
+  \end{itemize}
+  }
+  \only<2>{
+  \item Пример:\\
+      \begin{figure}[t]
+      \begin{tikzpicture}
+        \node {stmt} 
+          child {node {\bf{if}}}
+          child {node {\bf{(}}}
+          child {
+            node {exp}
+              child {node {\bf{0}}}
+          }
+          child {node {\bf{)}}}
+          child {node {\bf{then}}}
+          child {
+            node {stmt}
+              child {node{\bf{other}}}
+          }
+          child {node {\bf{else}}}
+          child {
+            node {stmt}
+              child {node{\bf{other}}}
+          }
+        ;
+      \end{tikzpicture}
+      \end{figure}
+      \begin{figure}[b]
+      \begin{tikzpicture}
+        \node {stmt}
+          child {node {\bf{0}}}
+          child {node {\bf{other}}}
+          child {node {\bf{other}}}
+        ;
+      \end{tikzpicture}
+      \end{figure}
+  }
+\end{itemize}
+\end{frame}
+
+\subsection{Неоднозначности}
+\begin{frame}
+\frametitle{Неоднозначности}
+\begin{itemize}
+  \item Существуют различные порождения одной строки
+  \item Отражают различную семантику операций
+  \item Пример для $id + id * id$:
+    \begin{columns}
+      \begin{column}{0.5\textwidth}
+        \begin{figure}
+        \begin{tikzpicture}
+          \node {E}
+            child {
+              node {E}
+                child {node {\bf{id}}}
+            }
+            child {node {\bf{+}}}
+            child {
+              node {E}
+                child {
+                  node {E}
+                    child{node {\bf{id}}}
+                }
+                child {node {\bf{*}}}
+                child {
+                  node {E}
+                    child{node {\bf{id}}}
+                }
+            }
+          ;
+        \end{tikzpicture}      
+        \end{figure}
+      \end{column}
+      \begin{column}{0.5\textwidth}
+        \begin{figure}
+        \begin{tikzpicture}
+          \node {E}
+            child {
+              node {E}
+                child {
+                  node {E}
+                    child{node {\bf{id}}}
+                }
+                child {node {\bf{+}}}
+                child {
+                  node {E}
+                    child{node {\bf{id}}}
+                }
+            }            
+            child {node {\bf{*}}}
+            child {
+              node {E}
+                child {node {\bf{id}}}
+            }
+          ;
+        \end{tikzpicture}      
+        \end{figure}
+      \end{column}
+    \end{columns}
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Устранение неоднозначностей}
+\begin{itemize}
+  \item Изменение грамматики
+  \item Использование правил устранения неоднозначности
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Устранение неоднозначности из грамматики}
+\begin{itemize}
+  \item Рассмотрим грамматику:
+  $$ S \rightarrow \bold{if} \: E \: \bold{then} \: S \: \bold{else} \: S $$
+  \item ... и строку
+  $$ \bold{if} \: E_1 \: \bold{then} \: \bold{if} \: E_2 \: \bold{then} \: S_1 \: \bold{else} \: S_2 $$
+  \item \textbf{Else} должен соответствовать ближайшему \textbf{then}:
+  \begin{align*}
+    & S \rightarrow M \mid U \\ 
+    & M \rightarrow \bold{if} \: E \: \bold{then} \: M \: \bold{else} \: M \\
+    & U \rightarrow \bold{if} \: E \: \bold{then} \: S \mid 
+        \bold{if} \: E \: \bold{then} \: M \: \bold{else} \: U
+  \end{align*}
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Устранение неоднозначности из грамматики}
+\begin{itemize}
+  \item Можно оставить неоднозначность грамматики, но указать парсеру семантические особенности языка:
+    \begin{itemize}
+      \item Ассоциативность операций(\%left)
+      \item Приоритет операций (\%left '+' \%left '*')
+    \end{itemize}
+\end{itemize}
+\end{frame}
+
+\subsection{Обработка ошибок}
+\begin{frame}
+\frametitle{Обработка ошибок}
+\begin{itemize}
+  \item Цель компилятора - транслировать правильные программы и отслеживать ошибочные
+  \item Способы обработки ошибок:
+  \begin{itemize}
+    \item Режим паники \\ Пропустить всё до следующего синхронизирующего токена
+    \item Продукции ошибок \\ Записать в грамматике наиболее частые ошибочные конструкции
+    \item Коррекция \\ Попытаться изменить ошибочную программу до ближайшей рабочей
+  \end{itemize}
+  \item В современных распротранённых компиляторах сложные обработчики ошибок не применяются
+\end{itemize}
+\end{frame}
+
+\section{Нисходящий анализ}
+
+\begin{frame}[plain]
+  \begin{center}
+    \structure{{\Large Нисходящий анализ}\\
+      \vspace{1cm}
+      {\large Метод рекурсивного спуска}}
+  \end{center}
+\end{frame}
+
+\addtocounter{framenumber}{-1}
+
+\subsection{Метод}
+\begin{frame}
+\frametitle{Построение дерева разбора}
+\begin{itemize}
+  \item Дерево разбора строится сверху-вниз слева-направо.
+  \item Терминальные символы рассматриваются в порядке поступления.
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Пример}
+\begin{itemize}
+  \item Рассмотрим грамматику:
+  \begin{align*}
+    E &\rightarrow T \: \mid \: T \: + \: E \\
+    T &\rightarrow \bold{int} \mid \bold{int} \: * \: T \: \mid (E)
+  \end{align*}
+  \item Входная строка
+    $$(\bold{int}_5)$$
+  \item Начинаем со стартового нетерминала $E$ и перебираем продукции в порядке их объявления
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Пример}
+\begin{columns}
+  \begin{column}{0.5\textwidth}
+  \begin{align*}
+    E &\rightarrow \alert<2,9>{T} \: \mid \: T \: + \: E \\
+    T &\rightarrow \alert<3,10>{\bold{int}} \mid \alert<5>{\bold{int}} \: \alert<5>{*} \: \alert<5>{T} \: \mid \alert<7>{(E)}
+  \end{align*}
+  \vspace{1cm}  
+  \begin{align*}
+    \alert<1-7,13>{(} & \alert<8-10,13>{\bold{int}_5} \alert<11,13>{)} \\
+    &\only<8,11,12>{\alert{\rightarrow}}
+  \end{align*}
+  \end{column}
+  \begin{column}{0.5\textwidth}
+  \begin{figure}
+  \begin{tikzpicture}
+    \node {E}
+      child [visible on=<2->] {
+        node {T} 
+          child [visible on=<3>] {node {\alert{\bf{int}}}}
+        node {}
+          child [visible on=<5>] {node {\alert{\bf{int}}}}
+          child [visible on=<5>] {node {\alert{*}}}
+          child [visible on=<5>] {node {\alert{T}}}
+        node {}
+          child [visible on=<7->] {node {\alert<13>{(}}}
+          child [visible on=<7->] {
+            node {E}
+              child [visible on=<9->] {
+                node {T}
+                  child [visible on=<10->] {node {\alert<13>{\bf{int}}}}
+              }
+          }
+          child [visible on=<7->] {node {\alert<13>{)}}}
+      }
+    ;
+  \end{tikzpicture}
+  \end{figure}
+  \end{column}
+\end{columns}
+\end{frame}
+
+\subsection{Левая рекурсия}
+\begin{frame}
+\frametitle{Левая рекурсия}
+\begin{itemize}
+  \item Рассмотрим продукцию:
+    $$ S \rightarrow Sa $$
+  \item ... и метод рекурсивного спуска входит в бесконечный цикл
+  \item Грамматика называется леворекурсивной, если в неё входит продукция вида:
+    $$ S \rightarrow^+ S\alpha $$
+  \item Такие грамматики не подходят для метода рекурсивного спуска
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Пример устранения левой рекурсии}
+\begin{itemize}
+  \item Рассмотрим леворекурсивную грамматику:
+    $$ S \rightarrow S\alpha \: \mid \: \beta  $$ 
+  \item $S$ порождает все строки начинающиеся с $\beta$ с произвольным числом последующих $\alpha$.
+    $$ S \rightarrow S\alpha \: \rightarrow S\alpha\alpha \: \rightarrow \dots \rightarrow S\alpha\dots\alpha \rightarrow \beta\alpha\dots\alpha $$ 
+  \item Можно переписать использую правую рекурсию:
+    \begin{align*}
+      &S \rightarrow \beta S' \\
+      &S' \rightarrow \alpha S' \: \mid \: \varepsilon
+    \end{align*}
+  
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Левая факторизация}
+\begin{itemize}
+  \item Рассмотрим грамматику:
+    $$ S \rightarrow \alpha\beta_1 \: \mid \: \alpha\beta_2  $$ 
+  \item Она не совместима с методом рекурсивного спуска с возвратом - однажды поглотив символ $\alpha$ с использованием первой продукции, он не сможет использовать вторую.
+  \item Устранение этой неоднозначности - левая факторизация:
+    \begin{align*}
+      &S \rightarrow \alpha S' \\
+      &S' \rightarrow \beta_1 \: \mid \: \beta_2
+    \end{align*}
+  
+\end{itemize}
+\end{frame}
+
+\end{document}
+
+

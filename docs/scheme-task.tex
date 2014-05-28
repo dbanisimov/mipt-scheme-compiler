@@ -1,0 +1,147 @@
+\documentclass[twocolumn,10pt]{article}
+
+%AMS-TeX packages
+\usepackage{amssymb,amsmath,amsthm} 
+%geometry (sets margin) and other useful packages
+\usepackage[margin=1in]{geometry}
+\usepackage{graphicx,ctable,booktabs}
+\usepackage[utf8]{inputenc}
+\usepackage[english,russian]{babel}
+\usepackage{listings}
+%\usepackage{columns}
+
+\lstset{ language=Lisp,
+         showspaces=false,
+         morekeywords={define, begin, car, cdr}}
+
+%
+%Redefining sections as problems
+%
+\makeatletter
+\newenvironment{problem}{\@startsection
+       {section}
+       {1}
+       {-.2em}
+       {-3.5ex plus -1ex minus -.2ex}
+       {2.3ex plus .2ex}
+       {\pagebreak[3]%forces pagebreak when space is small; use \eject for better results
+       \large\bf\noindent{Задача }
+       }
+       }
+       {%\vspace{1ex}\begin{center} \rule{0.3\linewidth}{.3pt}\end{center}}
+       \begin{center}\large\bf \ldots\ldots\ldots\end{center}}
+\makeatother
+
+
+%
+%Fancy-header package to modify header/page numbering 
+%
+\usepackage{fancyhdr}
+\pagestyle{fancy}
+%\addtolength{\headwidth}{\marginparsep} %these change header-rule width
+%\addtolength{\headwidth}{\marginparwidth}
+\lhead{Задача \thesection}
+\chead{} 
+\rhead{\thepage} 
+\lfoot{\small\scshape MIPTScheme} 
+\cfoot{} 
+\rfoot{\footnotesize iLab МФТИ} 
+\renewcommand{\headrulewidth}{.3pt} 
+\renewcommand{\footrulewidth}{.3pt}
+\setlength\voffset{-0.25in}
+\setlength\textheight{648pt}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+%
+%Contents of problem set
+%    
+\begin{document}
+
+\title{Обзор языка Scheme \\
+      {\small  MIPT Scheme compiler }}
+%\author{Арсений Заостровных}
+\date{27.10.12}
+
+\maketitle
+
+\thispagestyle{empty}
+
+\begin{problem}{\it Списки}
+Дан список: '(a (b (c d) (e) ()) (f (g)))
+
+Выпишите:
+\begin{enumerate}
+\item Его длину
+\item Его же с помощью ``точечных пар'' -- (x . y)
+\item Программу, получающую элемент 'e из этого списка, с помощью функций car и cdr.
+\end{enumerate}
+\end{problem}
+
+\begin{problem}{\it Переменные}
+Что напечатают следующие 2 программы:
+\begin{lstlisting}
+(define y 81)
+(let ((x 1))
+  (set! x 11)
+  (let ((y (+ 1 x)) (x 18))
+    (write (+ x y))))
+  \end{lstlisting}
+и
+ \begin{lstlisting}
+(let ((a (let ((b "b1")
+               (c "c1"))
+           c))
+      (b "b2"))
+  (let ((c a) (a b))
+    (write a)
+    (write b)))
+  \end{lstlisting}
+\end{problem}
+
+\begin{problem}{\it Функции}
+Дано определение функции:
+\begin{lstlisting}
+(define a 1)
+(define (foo a b)
+  (let ((b 10))
+    (write a)
+    (write b)
+    (+ a b)))
+\end{lstlisting}
+Что напечатает следующая программа:
+\begin{lstlisting}
+(let ((x 100)
+      (b (begin (write a) a)))
+  (write (foo x b)))
+\end{lstlisting}
+?
+\end{problem}
+
+\begin{problem}{\it Рекурсия}
+Напишите функцию (max lst) с использованием хвостовой рекурсии,
+ выбирающую максимальный элемент из списка чисел.
+\end{problem}
+
+\begin{problem}{\it Замыкания}
+Что напечатает следующая программа:
+\begin{lstlisting}
+(define (make-snake tail)
+  (cons (lambda () tail)
+        (lambda (x) (set! tail (cons tail x)))))
+
+(let ((snake (make-snake '())))
+  ((cdr snake) 42)
+  (let ((python (make-snake ((car snake)))))
+    ((cdr python) 84)
+    (write ((car python)))
+    (write ((car snake)))))
+\end{lstlisting}
+?
+\end{problem}
+
+\begin{problem}{\it Макросы}
+Напишите макрос (push! a lst) добавляющий элемент в начало списка.
+\end{problem}
+
+\end{document}
